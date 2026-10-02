@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- PROVISIONAL emblem for "Aster Ledger" (placeholder name). Original artwork.
+       Not affiliated with, and does not imitate, any trading venue. Replace via src/core/config.ts. -->
+  <rect x="4" y="4" width="56" height="56" rx="10" fill="#0f2a2e"/>
+  <path d="M32 10l5 13 14 1-11 9 4 14-12-8-12 8 4-14-11-9 14-1z" fill="#f2b84b"/>
+  <path d="M14 50h36M14 44h24" stroke="#5fe3d0" stroke-width="3" stroke-linecap="round"/>
+</svg>

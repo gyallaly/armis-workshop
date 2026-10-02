@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- PROVISIONAL neutral shop emblem for "Etsy Studio" (placeholder name).
+       Original artwork; deliberately NOT the Etsy corporate logo. Replace via src/core/config.ts. -->
+  <rect x="6" y="14" width="44" height="36" rx="6" fill="#e08a4f" transform="rotate(-8 28 32)"/>
+  <circle cx="16" cy="24" r="4" fill="#3a2a22" transform="rotate(-8 28 32)"/>
+  <path d="M14 38h28M14 44h20" stroke="#ffe2c2" stroke-width="3" stroke-linecap="round" stroke-dasharray="3 3" transform="rotate(-8 28 32)"/>
+  <path d="M16 24 Q 30 6 54 10" fill="none" stroke="#ffe2c2" stroke-width="2"/>
+</svg>

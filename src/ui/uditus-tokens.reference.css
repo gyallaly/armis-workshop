@@ -1,0 +1,441 @@
+/*
+ * Uditus design tokens — the single source of visual truth.
+ *
+ * Every colour, type size, space step, radius and focus value in this
+ * business is written here ONCE. apps/site, apps/console and the PDF report
+ * (packages/core/report-html.ts) all read this file; nothing downstream is
+ * allowed to invent a hex, a px size or a font stack of its own.
+ *
+ * Values come from the approved design system (v1.0, August 2026). Their
+ * measured WCAG contrast ratios are asserted in packages/core/palette.test.ts
+ * with the same helper the scanner uses on client sites — the accessibility
+ * floor here is a check, not a preference. Change a value and that test tells
+ * you what it broke before a client does.
+ *
+ * ── HOW THE THEMING WORKS ─────────────────────────────────────────────────
+ *
+ *   §1  Scale.  Every literal hex in the system, each written exactly once,
+ *       light-ground values and dark-ground values side by side. Nothing
+ *       outside this section contains a colour literal.
+ *   §2  Roles, light.  Bare :root — no media query, no attribute. This is the
+ *       palette a browser gets when it tells us nothing.
+ *   §3  Roles, dark, by preference.  Guarded with :not([data-theme="light"])
+ *       so an explicit light choice still wins over the OS setting.
+ *   §4  Roles, dark, explicit.  data-theme="dark" wins in both directions.
+ *
+ * §3 and §4 assign the SAME role tokens to the SAME §1 scale entries, and
+ * neither contains a literal — so no colour is ever defined only inside a
+ * media query, and the two dark blocks cannot drift. palette.test.ts asserts
+ * they are identical, property for property.
+ */
+
+/* =====================================================================
+ * §1  SCALE — every hex in the system, written once
+ * ===================================================================== */
+
+:root {
+  /* Blue — brand and interface. Fixed: these are the brand, not a theme. */
+  --u-navy-900: #0C2F51;
+  --u-navy-800: #123D68;
+  --u-blue-700: #1B4F80;
+  --u-blue-500: #3C7AB0;
+  --u-blue-300: #8FB6D6;
+  --u-blue-200: #BBD3E7;
+  --u-blue-100: #E3EDF5;
+
+  /* Neutral — text, paper, rules, on light grounds. */
+  --u-ink: #1A2430;
+  --u-ink-muted: #5A6875;
+  /*
+   * EXTENSION, not in the published design system. The system publishes two
+   * text neutrals; both apps and the report already carry three levels
+   * (ink / muted / faint) and collapsing the third would flatten every table
+   * header, timestamp and unit label in the console. This is the lightest
+   * step along the same hue that still clears 4.5:1 on white, on Paper Cool
+   * and on the raised table-header ground — measured, not eyeballed, and
+   * asserted in palette.test.ts.
+   *
+   * IT IS NEVER USED BELOW 14px, and that is now a check rather than a claim.
+   * The design system's own line is "Ink Muted — captions, labels, never
+   * below 14px", and this file repeated it for the extension token while 28
+   * shipped rules — two of them button labels — set both neutrals at
+   * --size-mono (13px). Contrast still cleared 4.5:1, so nothing fired; what
+   * was lost is the legibility margin the 14px rule exists to protect, on the
+   * smallest and lowest-contrast type in the product. typography.test.ts now
+   * fails any rule that pairs a 13px step with either neutral — and, because a
+   * browser reads the whole cascade rather than one rule, it also resolves
+   * every element in both apps against the sheets that ship and fails whatever
+   * COMPUTES to a quiet neutral under 14px, whether the size and the colour
+   * arrive from two classes on one element or from an ancestor. So the
+   * sentence above cannot go back to being decoration.
+   */
+  --u-ink-faint: #616F7D;
+  --u-paper-cool: #F5F8FA;
+  --u-white: #FFFFFF;
+  --u-raised: #FBFCFD;
+  --u-rule: #DDE3E9;
+  /*
+   * A hairline divider is structure and may sit at 1.3:1 (the design system's
+   * own Rule value does). The boundary of a CONTROL may not — WCAG 1.4.11
+   * wants 3:1 — so inputs, buttons and checkboxes get their own border token.
+   */
+  --u-border-control: #7D8B99;
+
+  /* Semantic — findings data only. Never a marketing layout, never a field. */
+  --u-critical: #9E2B2B;
+  /* The hovered state of the one destructive control in the console (delete a
+     lead). A hover is still a control ground with a label on it, so it is a
+     scale entry with a measured ratio rather than a literal in a page. */
+  --u-critical-strong: #7E2020;
+  --u-serious: #A15A18;
+  --u-moderate: #7A6A15;
+  --u-resolved: #1F6B4A;
+  --u-tint-critical: #F7EBEB;
+  --u-tint-serious: #F8F0E7;
+  --u-tint-moderate: #F5F2E4;
+  --u-tint-resolved: #E8F2ED;
+  --u-tint-neutral: #EFF2F4;
+
+  /* Neutral — the same roles on dark grounds. Same hue family, inverted. */
+  --u-ink-dk: #E6ECF2;
+  --u-ink-muted-dk: #A2B0BE;
+  --u-ink-faint-dk: #8B99A7;
+  --u-paper-dk: #0D131A;
+  --u-surface-dk: #151C25;
+  --u-raised-dk: #1A222C;
+  --u-rule-dk: #2A3542;
+  --u-border-control-dk: #616F7D;
+  --u-blue-soft-dk: #16293A;
+
+  /* Semantic on dark grounds. Lightened until each clears 4.5:1 on the dark
+     page ground, the dark card and its own chip tint. */
+  --u-critical-dk: #E89A94;
+  --u-critical-strong-dk: #F2BCB7;
+  --u-serious-dk: #DCA36A;
+  --u-moderate-dk: #C9BC6B;
+  --u-resolved-dk: #6FC49C;
+  --u-tint-critical-dk: #2C1A1A;
+  --u-tint-serious-dk: #2B2015;
+  --u-tint-moderate-dk: #272414;
+  --u-tint-resolved-dk: #152A22;
+  --u-tint-neutral-dk: #1E252E;
+}
+
+/* =====================================================================
+ * §2  ROLES — light. Bare :root: the default when nothing is declared.
+ * ===================================================================== */
+
+:root {
+  /* --- grounds and text --- */
+  --paper: var(--u-paper-cool);
+  --surface: var(--u-white);
+  --surface-raised: var(--u-raised);
+  --ink: var(--u-ink);
+  --ink-muted: var(--u-ink-muted);
+  --ink-faint: var(--u-ink-faint);
+  --rule: var(--u-rule);
+  --border-control: var(--u-border-control);
+
+  /* Reversed block — mastheads, code panels, the report cover band.
+     Reversed is pure white on Navy 900 and nothing else, and that is true in
+     the dark theme too: the dark blocks below reassign it to the same pair.
+     A "dark-mode variant" of a reversed block would be a second reversed
+     treatment, which the brand does not have. */
+  --reverse-bg: var(--u-navy-900);
+  --reverse-ink: var(--u-white);
+  --reverse-ink-muted: var(--u-blue-200);
+
+  /* --- the one accent --- */
+  --accent: var(--u-blue-700);
+  --accent-strong: var(--u-navy-900);
+  --accent-ink: var(--u-white);          /* text ON an accent ground */
+  --accent-soft: var(--u-blue-100);      /* tinted surface */
+  --accent-on-soft: var(--u-blue-700);   /* text on that tint */
+  --accent-graphic: var(--u-blue-500);   /* rules, marks, large type only */
+
+  /* --- focus. Never suppressed, never replaced by a colour change. --- */
+  --focus-color: var(--u-blue-500);
+  --focus-width: 3px;
+  --focus-offset: 2px;
+
+  /* --- severity. Always paired with the word, never colour alone. --- */
+  --critical: var(--u-critical);
+  --critical-strong: var(--u-critical-strong);
+  --serious: var(--u-serious);
+  --moderate: var(--u-moderate);
+  --resolved: var(--u-resolved);
+  --tint-critical: var(--u-tint-critical);
+  --tint-serious: var(--u-tint-serious);
+  --tint-moderate: var(--u-tint-moderate);
+  --tint-resolved: var(--u-tint-resolved);
+  --tint-neutral: var(--u-tint-neutral);
+  --on-tint-neutral: var(--u-ink-muted);
+  /* Text or a glyph sitting ON a filled severity ground — a tick inside a
+     status box, a label inside a bar segment. Flips with the theme because
+     the severity colours do. */
+  --semantic-ink: var(--u-white);
+
+  /* --- legacy aliases -------------------------------------------------
+   * The apps and the report were written against these names. They stay,
+   * pointing at the roles above, so adopting the system is a one-line diff
+   * per file instead of a five-hundred-line search and replace with a
+   * chance of a typo in every one. New code uses the role names. */
+  --muted: var(--ink-muted);
+  --faint: var(--ink-faint);
+  --marine: var(--accent);
+  --marine-soft: var(--accent-soft);
+  --ok: var(--resolved);
+  --warn: var(--serious);
+  --bad: var(--critical);
+  --sans: var(--font-sans);
+  --mono: var(--font-mono);
+}
+
+/* =====================================================================
+ * §3  ROLES — dark, by OS preference.
+ *     Guarded: an explicit data-theme="light" still wins here.
+ * ===================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: var(--u-paper-dk);
+    --surface: var(--u-surface-dk);
+    --surface-raised: var(--u-raised-dk);
+    --ink: var(--u-ink-dk);
+    --ink-muted: var(--u-ink-muted-dk);
+    --ink-faint: var(--u-ink-faint-dk);
+    --rule: var(--u-rule-dk);
+    --border-control: var(--u-border-control-dk);
+    --reverse-bg: var(--u-navy-900);
+    --reverse-ink: var(--u-white);
+    --reverse-ink-muted: var(--u-blue-200);
+    --accent: var(--u-blue-300);
+    --accent-strong: var(--u-blue-200);
+    --accent-ink: var(--u-navy-900);
+    --accent-soft: var(--u-blue-soft-dk);
+    --accent-on-soft: var(--u-blue-300);
+    --accent-graphic: var(--u-blue-300);
+    --focus-color: var(--u-blue-500);
+    --focus-width: 3px;
+    --focus-offset: 2px;
+    --critical: var(--u-critical-dk);
+    --critical-strong: var(--u-critical-strong-dk);
+    --serious: var(--u-serious-dk);
+    --moderate: var(--u-moderate-dk);
+    --resolved: var(--u-resolved-dk);
+    --tint-critical: var(--u-tint-critical-dk);
+    --tint-serious: var(--u-tint-serious-dk);
+    --tint-moderate: var(--u-tint-moderate-dk);
+    --tint-resolved: var(--u-tint-resolved-dk);
+    --tint-neutral: var(--u-tint-neutral-dk);
+    --on-tint-neutral: var(--u-ink-muted-dk);
+    --semantic-ink: var(--u-navy-900);
+  }
+}
+
+/* =====================================================================
+ * §4  ROLES — dark, chosen explicitly. Wins over §2 and over the OS.
+ *     Identical to §3, property for property; palette.test.ts checks it.
+ * ===================================================================== */
+
+:root[data-theme="dark"] {
+  --paper: var(--u-paper-dk);
+  --surface: var(--u-surface-dk);
+  --surface-raised: var(--u-raised-dk);
+  --ink: var(--u-ink-dk);
+  --ink-muted: var(--u-ink-muted-dk);
+  --ink-faint: var(--u-ink-faint-dk);
+  --rule: var(--u-rule-dk);
+  --border-control: var(--u-border-control-dk);
+  --reverse-bg: var(--u-navy-900);
+  --reverse-ink: var(--u-white);
+  --reverse-ink-muted: var(--u-blue-200);
+  --accent: var(--u-blue-300);
+  --accent-strong: var(--u-blue-200);
+  --accent-ink: var(--u-navy-900);
+  --accent-soft: var(--u-blue-soft-dk);
+  --accent-on-soft: var(--u-blue-300);
+  --accent-graphic: var(--u-blue-300);
+  --focus-color: var(--u-blue-500);
+  --focus-width: 3px;
+  --focus-offset: 2px;
+  --critical: var(--u-critical-dk);
+  --critical-strong: var(--u-critical-strong-dk);
+  --serious: var(--u-serious-dk);
+  --moderate: var(--u-moderate-dk);
+  --resolved: var(--u-resolved-dk);
+  --tint-critical: var(--u-tint-critical-dk);
+  --tint-serious: var(--u-tint-serious-dk);
+  --tint-moderate: var(--u-tint-moderate-dk);
+  --tint-resolved: var(--u-tint-resolved-dk);
+  --tint-neutral: var(--u-tint-neutral-dk);
+  --on-tint-neutral: var(--u-ink-muted-dk);
+  --semantic-ink: var(--u-navy-900);
+}
+
+/* =====================================================================
+ * §5  TYPE, SPACE, FORM — theme-independent
+ *
+ * This section is not decoration either. Before it had consumers, a type size
+ * and a spacing value existed in about fifty places across two apps and the
+ * PDF, and both apps disagreed with the published 4px scale and with each
+ * other. Every rule downstream now reads from here: both globals.css files,
+ * the four route-scoped <style> blocks and REPORT_RULES in
+ * packages/core/report-html.ts contain no px font-size and no px padding,
+ * margin or gap of their own. packages/core/typography.test.ts reads those
+ * seven stylesheets and fails on any literal that reappears, so this stays
+ * true rather than merely starting true.
+ * ===================================================================== */
+
+:root {
+  /*
+   * Manrope and IBM Plex Mono are self-hosted (fonts.css for the apps,
+   * fonts-embedded.css for the PDF). The fallbacks are real stacks, not
+   * decoration: if a face fails to load the page is still set in something
+   * with the right proportions rather than in Times.
+   */
+  --font-sans: Manrope, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  /*
+   * Weights. These three are the only ones that exist here.
+   *
+   * The apps used to set 500, 555, 560, 620 and 650 as well, which worked only
+   * because Manrope was loaded as a variable font — and which the design
+   * system does not contain. The faces are now static instances at exactly
+   * these weights (see fonts.css), so a rule asking for 555 would be rendered
+   * at the nearest of them anyway; asking for one by name is the same result,
+   * stated.
+   *
+   * The system's fourth weight, 800, is display only — and this product sets
+   * no Display-scale sans type at all. Its one Display-sized element, the
+   * report's score, is a NUMBER, so it is monospace, and IBM Plex Mono has no
+   * 800 to give it. So neither the token nor the face is declared: a weight
+   * nothing can render is the same dead declaration as a size nothing reads.
+   * `packages/ui/instance-manrope.py` cuts an 800 the day something needs one.
+   */
+  --weight-regular: 400;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* Type scale — size / line-height / tracking, as published.
+     Floors: 16px body on screen, 14px for captions and labels, 13px for the
+     two published 13px steps and nothing at all below them. Print floors are
+     12pt body and 10pt for a table cell or a caption; Chromium prints at
+     96dpi, so 12pt is 16px and 10pt is 13.34px, which is why the report is set
+     from these same steps and never uses --size-mono. Nothing smaller ships,
+     including disclaimers. */
+  --size-display: 40px;   --lh-display: 44px;   --track-display: -0.025em;
+  --size-h1: 28px;        --lh-h1: 34px;        --track-h1: -0.02em;
+  --size-h2: 20px;        --lh-h2: 26px;        --track-h2: 0;
+  --size-eyebrow: 13px;   --lh-eyebrow: 18px;   --track-eyebrow: 0.08em;
+  --size-body: 16px;      --lh-body: 26px;      --track-body: 0;
+  --size-caption: 14px;   --lh-caption: 22px;   --track-caption: 0;
+  --size-mono: 13px;      --lh-mono: 21px;      --track-mono: 0;
+
+  /*
+   * EXTENSIONS to the published type scale, and the reason each one exists.
+   * The system publishes Display, H1, H2, Eyebrow, Body, Caption and Mono. A
+   * console full of readings and a report with a cover figure need seven more
+   * steps; inventing them at the point of use is what produced twenty-five
+   * different sizes across two apps, so they are named here instead.
+   */
+  --size-h3: 17px;        --lh-h3: 24px;      /* a section head inside a section */
+  --size-lede: 17px;      --lh-lede: 26px;    /* the one-line summary under an h1 */
+
+  /*
+   * Figures. Every number in this business is monospace, and a reading is
+   * sized by how important it is rather than by the text around it. Three
+   * steps: a funnel stage, a full-width stat row, a figure inside a card. The
+   * one reading larger than these — the headline count on the build board —
+   * is set at Display, which is the published step for exactly that job and
+   * would otherwise be a scale entry nothing reads.
+   */
+  --size-figure-lg: 34px; --lh-figure-lg: 36px;
+  --size-figure: 26px;    --lh-figure: 28px;
+  --size-figure-sm: 20px; --lh-figure-sm: 22px;
+
+  /*
+   * The report's two score figures. A printed score is the one thing on the
+   * page a reader takes in from across a desk, and it is the only place in the
+   * business set larger than Display.
+   */
+  --size-report-score: 92px;
+  --size-report-headline: 64px;
+
+  /* Measure. 68 characters maximum for body text. */
+  --measure: 68ch;
+  /* Wider measures, for text that is a table of readings rather than prose:
+     a page note above a strip of figures, and a table caption. Still bounded —
+     an unbounded line length is the failure the measure exists to prevent. */
+  --measure-note: 78ch;
+  --measure-wide: 88ch;
+
+  /* Space — 4px base. Nothing between these values. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+  --space-9: 96px;
+
+  /* Grid. --content-max is the system's published ceiling; the two widths
+     under it are what the apps actually set, and typography.test.ts asserts
+     both stay inside it rather than leaving the ceiling as a decoration. */
+  --content-max: 1120px;
+  --content-text: 860px;   /* prose and marketing pages */
+  --content-wide: 1080px;  /* the console's data pages */
+  --gutter: var(--space-5);
+
+  /* Form. Radius 0 everywhere except buttons, inputs and chips. */
+  --radius: 0;
+  --radius-control: 3px;
+
+  /*
+   * Elevation. The system publishes one shadow, for overlays only — and this
+   * business has no overlays: cards use a 1px rule, the score is a scale, and
+   * nothing floats. The token is deliberately absent rather than declared and
+   * unread; it comes back the day something needs it, with its consumer.
+   */
+
+  /* Targets. 44x44 minimum, 8px minimum between adjacent targets.
+     --target-min is a MIN-HEIGHT on the hit area, not a size for the artwork
+     inside it: the header lockup stays 22px tall and sits centred in a 44px
+     link, so nothing moves visually and the target is real. */
+  --target-min: 44px;
+  --target-gap: var(--space-2);
+  /* The brand lockup's drawn height. 22px, above the 20px minimum the brand
+     guidance sets for a lockup; the link around it is --target-min tall. */
+  --brand-lockup-height: 22px;
+
+  /*
+   * PRINT PAGE GEOMETRY — the PDF report only.
+   *
+   * In millimetres, because paper is. These are not spacing steps and they are
+   * not on the 4px scale: they are the margins Chromium is asked to print with
+   * (packages/core/report.ts reads them from here). Chromium CLIPS all paint
+   * to inside them — no bleed is possible — so they are also the width of the
+   * white frame around the cover plate, worn deliberately. Slimmed from
+   * 16/14/18 at the founder's direction, looking at a rendered page: the
+   * bottom keeps enough room for the running page number Chromium draws
+   * there, and nothing else needs the rest.
+   */
+  --print-margin-top: 9mm;
+  --print-margin-x: 9mm;
+  --print-margin-bottom: 12mm;
+  /*
+   * How tall the cover's BOX is: the height of the printed content area, A4's
+   * 297mm less the two margins above (297 - 9 - 12). The cover plate fills
+   * exactly one sheet's printable area — report-letterhead.test.ts holds this
+   * value to that arithmetic, because a plate 2mm tall of the page spills its
+   * metadata table onto page two alone. Written as one value rather than as
+   * arithmetic in a stylesheet, because it is one measurement: the height of
+   * a cover page.
+   */
+  --print-cover-height: 276mm;
+}
