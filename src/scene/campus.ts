@@ -628,7 +628,7 @@ function drawHQ(ctx: Ctx, iso: Iso, lights: { x: number; y: number; c: string; r
     });
   }
   // podium windows on right face
-  windowGrid(ctx, iso, 'right', x1, y0, y1, 0, 1, 10, 31, lights, { w: 6, gap: 3, litP: 0.8 });
+  storefront(ctx, iso, 'right', x1, y0, y1, lights, 31, 10);
   const hull = hullOf(iso, HQ, th + 30);
   return {
     id: 'hermes-hq',
@@ -658,8 +658,8 @@ function drawShop(
   box(ctx, iso, r.x0, r.y0, r.x1, r.y1, 0, h, wall);
   // ground-floor storefront
   const frontFace: 'left' | 'right' = isU ? 'right' : 'left';
-  windowGrid(ctx, iso, 'left', r.y1, r.x0, r.x1, 2, 1, 12, isU ? 41 : 51, lights, { w: 9, gap: 2, litP: 0.95, tall: true });
-  windowGrid(ctx, iso, 'right', r.x1, r.y0, r.y1, 2, 1, 12, isU ? 42 : 52, lights, { w: 9, gap: 2, litP: 0.95, tall: true });
+  storefront(ctx, iso, 'left', r.y1, r.x0, r.x1, lights, isU ? 41 : 51);
+  storefront(ctx, iso, 'right', r.x1, r.y0, r.y1, lights, isU ? 42 : 52);
   windowGrid(ctx, iso, 'left', r.y1, r.x0, r.x1, 14, floors - 1, fh, isU ? 43 : 53, lights, { w: 6, gap: 3, litP: 0.6 });
   windowGrid(ctx, iso, 'right', r.x1, r.y0, r.y1, 14, floors - 1, fh, isU ? 44 : 54, lights, { w: 6, gap: 3, litP: 0.55 });
   left(ctx, iso, r.y1, r.x0, r.x1, 13, 14, wall.rim);
@@ -901,4 +901,31 @@ function alongPath(pts: Pt[], k: number): Pt {
 
 function umbrellaTableAt(ctx: Ctx, iso: Iso, x: number, y: number, z: number, color: string) {
   umbrellaTable(ctx, iso.x(x, y), iso.y(x, y, z), color);
+}
+
+/**
+ * Ground-floor glass curtain wall: warm lit panes with desk, monitor and
+ * person silhouettes, so you can see into the building as in the mockup.
+ */
+function storefront(ctx: Ctx, iso: Iso, face: 'left' | 'right', plane: number, a0: number, a1: number, lights: { x: number; y: number; c: string; r: number; a: number }[], seed: number, h = 12) {
+  const r = lcg(seed);
+  const paneW = 12;
+  const fill = (u0: number, u1: number, z0: number, z1: number, c: string) =>
+    face === 'left' ? left(ctx, iso, plane, u0, u1, z0, z1, c) : right(ctx, iso, plane, u0, u1 - 1, z0, z1, c);
+  for (let u = a0 + 2; u + paneW <= a1 - 1; u += paneW + 1) {
+    fill(u, u + paneW, 1, h, '#f3c46a');
+    fill(u, u + paneW, h - 2, h, '#ffe2a6');
+    // interior: desk, glowing monitor, a seated person
+    fill(u + 2, u + 9, 2, 4, '#5a3d26');
+    if (r() < 0.8) fill(u + 4, u + 7, 4, 7, '#1b2433');
+    if (r() < 0.8) fill(u + 5, u + 6, 5, 6, '#5ad1ff');
+    if (r() < 0.6) {
+      fill(u + 8, u + 10, 2, 6, '#2b2230');
+      fill(u + 8, u + 10, 6, 8, '#3a2a1e');
+    }
+    // mullion
+    fill(u + paneW, u + paneW + 1, 0, h, '#3a3f4e');
+    const mid = u + paneW / 2;
+    lights.push(face === 'left' ? { x: iso.x(mid, plane), y: iso.y(mid, plane, h / 2), c: '#ffbf5a', r: 16, a: 0.35 } : { x: iso.x(plane, mid), y: iso.y(plane, mid, h / 2), c: '#ffbf5a', r: 16, a: 0.3 });
+  }
 }

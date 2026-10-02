@@ -34,7 +34,7 @@ export interface ActorDraw {
 
 const SPEED = 42; // world units per second
 /** Characters are drawn larger than the furniture grid, as in the mockup. */
-const S = 1.4;
+const S = 1.6;
 
 export class ActorSystem {
   private actors = new Map<string, Actor>();
@@ -136,8 +136,9 @@ export class ActorSystem {
       }
       if (a.targetKey !== p.key) {
         a.targetKey = p.key;
-        a.path = motion ? this.routeTo(a.pos, p.target) : [];
-        if (!motion) a.pos = [...p.target] as Pt;
+        const still = p.d.state === 'offline' || p.d.state === 'unknown';
+        a.path = motion && !still ? this.routeTo(a.pos, p.target) : [];
+        if (!motion || still) a.pos = [...p.target] as Pt;
       }
       a.seat = p.seat;
       a.state = p.d.state;

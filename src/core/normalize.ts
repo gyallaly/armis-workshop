@@ -30,7 +30,7 @@ export function normalizeEvent(e: ActivityEvent): ActivityEvent | null {
   if (e.type === 'ledger.updated') {
     const b = p.book as Record<string, any> | undefined;
     const arrays = ['positions', 'news', 'traders', 'sources', 'venues', 'equityHistory', 'operatingCosts', 'history'];
-    if (!b || b.paper !== true || arrays.some((k) => !Array.isArray(b[k])) || typeof b.candidates !== 'object') return null;
+    if (!b || b.paper !== true || arrays.some((k) => !Array.isArray(b[k])) || !b.candidates || typeof b.candidates !== 'object' || Array.isArray(b.candidates)) return null;
   }
   return { ...e, payload: p };
 }

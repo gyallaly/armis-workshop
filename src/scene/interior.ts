@@ -318,7 +318,14 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
     tree(ctx, iso.x(x, y), iso.y(x, y, -44), 8 + rnd() * 5, i * 17 + 3, 'round');
   }
 
+  // warm pools on the floor under every desk, then a vignette toward the edges
+  for (const r of rooms) for (const seat of r.seats) glow(ctx, iso.x(seat.at[0], seat.at[1] - 6), iso.y(seat.at[0], seat.at[1] - 6), '#ffbe64', 40, 0.28);
   for (const l of lights) glow(ctx, l.x, l.y, l.c, l.r, l.a);
+  const vg = ctx.createRadialGradient(W * 0.48, H * 0.45, H * 0.3, W * 0.48, H * 0.45, W * 0.62);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,8,0.45)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, W, H);
 
   const roomById = new Map(rooms.map((r) => [r.departmentId, r]));
   const cy = (CORR_Y0 + CORR_Y1) / 2;
@@ -451,11 +458,14 @@ function sideShelf(ctx: Ctx, iso: Iso, x0: number, y: number, w: number, z0: num
 }
 
 function wallSign(ctx: Ctx, iso: Iso, room: Room, label: string, color: string, lights: Lights, z: number) {
+  // painted onto the wall (not a neon box), with a soft wash of light
   const tw = textWidth(label, 2);
   const x = room.x1 - tw - 10;
-  left(ctx, iso, room.y0, x - 3, x + tw + 3, z - 14, z + 3, '#11131b');
-  leftText(ctx, iso, room.y0, x, z, label, color, 2);
-  lights.push({ x: iso.x(x + tw / 2, room.y0), y: iso.y(x + tw / 2, room.y0, z - 5), c: color, r: 24, a: 0.45 });
+  ctx.globalAlpha = 0.85;
+  leftText(ctx, iso, room.y0, x + 1, z - 1, label, '#2a2018', 2);
+  leftText(ctx, iso, room.y0, x, z, label, mix(color, '#e8dcc0', 0.55), 2);
+  ctx.globalAlpha = 1;
+  lights.push({ x: iso.x(x + tw / 2, room.y0), y: iso.y(x + tw / 2, room.y0, z - 5), c: '#ffcf8a', r: 22, a: 0.3 });
 }
 
 function furnish(
@@ -619,7 +629,8 @@ function furnish(
     const monitors = kind === 'audit' ? 3 : kind === 'capacity' ? 1 : 2;
     room.seats.push(deskAt(ctx, iso, startX + i * step, deskY, monitors, lights));
   }
-  // plants and lamps
+  // filing cabinet, plants and lamps
+  if (kind !== 'audit') box(ctx, iso, x1 - 22, y0 + 3, x1 - 12, y0 + 10, 0, 16, { top: '#5a5d6e', left: '#454857', right: '#3a3d4a', rim: '#7a7e92' });
   plant(ctx, iso, x1 - 8, y1 - 12, x0 + 3, true);
   if (x1 - x0 > 130) plant(ctx, iso, x0 + 10, y1 - 12, x0 + 9);
   void accent;
