@@ -594,6 +594,13 @@ function furnish(
     }
   } else if (kind === 'fixes') {
     wallSign(ctx, iso, room, 'FIXES', '#ffb070', lights, LOW_H - 3);
+    // workbench along the back, shelving and a rug so the room reads as a workshop
+    box(ctx, iso, x0 + 30, y0 + 70, x0 + 90, y0 + 80, 0, 9, { top: '#8a6544', left: '#6b4a30', right: '#553a25', rim: '#a07a55' });
+    for (let k = 0; k < 5; k++) px(ctx, iso.x(x0 + 36 + k * 11, y0 + 74), iso.y(x0 + 36 + k * 11, y0 + 74, 9) - 2, k % 2 ? '#c7cede' : '#d9a441', 3, 2);
+    top(ctx, iso, x1 - 80, y0 + 60, x1 - 20, y0 + 96, 0, '#3a4a5a');
+    top(ctx, iso, x1 - 77, y0 + 63, x1 - 23, y0 + 93, 0, '#465a6e');
+    plant(ctx, iso, x0 + 14, y0 + 90, 21, true);
+    plant(ctx, iso, x1 - 12, y0 + 50, 23);
     // toolbox + workbench clutter
     box(ctx, iso, x1 - 30, y0 + 6, x1 - 18, y0 + 12, 0, 8, { top: '#c0392b', left: '#9a2a20', right: '#7a2018', rim: '#e05a4a' });
     box(ctx, iso, x0 + 4, y0 + 40, x0 + 12, y0 + 60, 0, 16, { top: '#5a5d6e', left: '#454857', right: '#3a3d4a' });

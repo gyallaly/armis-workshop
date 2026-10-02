@@ -531,6 +531,7 @@ function BuildingLabel({ id, anchor, hovered, onEnter, onHover, extra }: { id: s
               <span>{c.queued + c.waitingProvider} queued</span>
               {c.held ? <span className="warn">{c.held} held</span> : null}
               {c.failed ? <span className="bad">{c.failed} failed</span> : null}
+              {c.unknown ? <span className="muted">{c.unknown} unknown</span> : null}
               <span className="muted">roster {c.roster}</span>
             </>
           ) : (
@@ -568,6 +569,7 @@ function RoomLabel({ departmentId, anchor }: { departmentId: string; anchor: Pt 
                 {c.waitingProvider ? <span className="warn">{c.waitingProvider} wait provider</span> : null}
                 {c.held ? <span className="warn">{c.held} held</span> : null}
                 {c.failed ? <span className="bad">{c.failed} failed</span> : null}
+                {c.unknown ? <span className="muted">{c.unknown} unknown</span> : null}
               </>
             )}
           </span>

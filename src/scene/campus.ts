@@ -110,7 +110,7 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   // far bank (behind the island), dark lawn
   top(ctx, iso, -420, -420, 520, 520, 0, '#111d17');
   // embankment along the front edges of the island
-  const E = 520;
+  const E = 480;
   left(ctx, iso, E, -420, E, -8, 0, C.bankDk);
   right(ctx, iso, E, -420, E, -8, 0, C.bank);
   for (let i = -400; i < E; i += 6) {
@@ -202,7 +202,7 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   const far: [number, number, number, number, number][] = [];
   for (let row = 0; row < 3; row++)
     for (let i = 0; i < 20; i++) {
-      if (rnd() < 0.3) continue;
+      if (rnd() < 0.62) continue;
       const a = -50 - row * 70 - rnd() * 20;
       const b = -100 + i * 32 + rnd() * 8;
       const dims: [number, number, number] = [18 + rnd() * 14, 18 + rnd() * 14, 14 + rnd() * (row === 0 ? 26 : 50)];
@@ -211,7 +211,7 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     }
   far.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
   for (const [x, y, w, d, h] of far) {
-    const wall = mix('#141a2b', '#1c2335', rnd());
+    const wall = mix('#10151f', '#161c2a', rnd());
     box(ctx, iso, x, y, x + w, y + d, 0, h, { top: shade(wall, 1.2), left: wall, right: shade(wall, 0.75) });
     for (let z = 6; z < h - 4; z += 7)
       for (let u = 2; u < w - 2; u += 4) {
@@ -342,7 +342,7 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   for (const p of props) if (!behind(p)) p.draw();
 
   // bridge over the water (front right)
-  drawBridge(ctx, iso, lights);
+  drawBridge(ctx, iso, lights, E);
 
   // ---------------------------------------------------------------- lights
   for (const l of lights) glow(ctx, l.x, l.y, l.c, l.r, l.a);
@@ -633,7 +633,7 @@ function drawHQ(ctx: Ctx, iso: Iso, lights: { x: number; y: number; c: string; r
   return {
     id: 'hermes-hq',
     hull,
-    label: [iso.x(tower.x0, tower.y0), iso.y(tower.x0, tower.y0, th + 34)],
+    label: [iso.x(tower.x0, tower.y0), iso.y(tower.x0, tower.y0, th + 4)],
     focus: [iso.x((x0 + x1) / 2, (y0 + y1) / 2), iso.y((x0 + x1) / 2, (y0 + y1) / 2, 50)],
     door: [iso.x(...HQ_DOOR), iso.y(...HQ_DOOR)],
   };
@@ -679,8 +679,14 @@ function drawShop(
   top(ctx, iso, r.x0 + 2, r.y0 + 2, r.x1 - 2, r.y1 - 2, h, shade(wall.top, 0.8));
   box(ctx, iso, r.x0 + 8, r.y0 + 8, r.x0 + 20, r.y0 + 18, h, h + 6, { top: '#596079', left: '#454b60', right: '#343849' });
   box(ctx, iso, r.x0 + 26, r.y0 + 8, r.x0 + 34, r.y0 + 16, h, h + 4, { top: '#596079', left: '#454b60', right: '#343849' });
+  // setback upper tier (penthouse) with its own windows
+  const tier: Rect = { x0: r.x0 + 6, y0: r.y0 + 6, x1: r.x0 + 40, y1: r.y0 + 44 };
+  box(ctx, iso, tier.x0, tier.y0, tier.x1, tier.y1, h, h + 18, { ...wall, rim: wall.rim });
+  windowGrid(ctx, iso, 'left', tier.y1, tier.x0, tier.x1, h, 1, 16, isU ? 61 : 71, lights, { w: 7, gap: 2, litP: 0.8, tall: true });
+  windowGrid(ctx, iso, 'right', tier.x1, tier.y0, tier.y1, h, 1, 16, isU ? 62 : 72, lights, { w: 7, gap: 2, litP: 0.75, tall: true });
   // roof terrace with string lights + plants
   top(ctx, iso, r.x0 + 40, r.y0 + 40, r.x1 - 4, r.y1 - 4, h, '#4a3b33');
+  for (let k = 0; k < 3; k++) umbrellaTableAt(ctx, iso, r.x0 + 52 + k * 14, r.y1 - 16, h, k % 2 ? '#3c7ab0' : '#e8e2d6');
   for (let k = 0; k < 6; k++) {
     const bx = r.x0 + 44 + ((k * 11) % (r.x1 - r.x0 - 50));
     const by = r.y0 + 44 + ((k * 7) % (r.y1 - r.y0 - 50));
@@ -753,11 +759,11 @@ function drawShop(
   };
 }
 
-function drawBridge(ctx: Ctx, iso: Iso, lights: { x: number; y: number; c: string; r: number; a: number }[]) {
-  const y0 = 384;
-  const y1 = 404;
-  for (let x = 520; x < 700; x += 2) {
-    const arch = Math.sin(((x - 520) / 180) * Math.PI) * 6;
+function drawBridge(ctx: Ctx, iso: Iso, lights: { x: number; y: number; c: string; r: number; a: number }[], E: number) {
+  const y0 = 330;
+  const y1 = 350;
+  for (let x = E; x < E + 170; x += 2) {
+    const arch = Math.sin(((x - E) / 170) * Math.PI) * 7;
     top(ctx, iso, x, y0, x + 2, y1, arch, '#5a4a3d');
     left(ctx, iso, y1, x, x + 2, arch - 5, arch, '#3e3229');
     if (x % 8 === 0) top(ctx, iso, x, y0, x + 1, y1, arch, '#4a3d33');
@@ -891,4 +897,8 @@ function alongPath(pts: Pt[], k: number): Pt {
     d -= seg;
   }
   return pts[pts.length - 1]!;
+}
+
+function umbrellaTableAt(ctx: Ctx, iso: Iso, x: number, y: number, z: number, color: string) {
+  umbrellaTable(ctx, iso.x(x, y), iso.y(x, y, z), color);
 }

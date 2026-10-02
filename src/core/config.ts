@@ -17,7 +17,7 @@ const STANDARD: [DepartmentKind, string, number][] = [
   ['creation', 'Creation', 3],
   ['audit', 'Audit', 3],
   ['lounge', 'Lounge', 0],
-  ['fixes', 'Fixes', 3],
+  ['fixes', 'Fixes', 5],
 ];
 
 export const BUSINESSES: Business[] = [

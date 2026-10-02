@@ -282,7 +282,7 @@ export class LedgerModel {
       n2.contradicts.push(n3.id);
       news.push(n3);
     }
-    this.book.news = [...news, ...this.book.news].slice(0, 40);
+    this.book.news = this.trimNews([...news, ...this.book.news]);
     this.book.candidates = {
       ...this.book.candidates,
       [taskId]: { taskId, question: tpl.question, side: 'YES', quotes, bestVenueId: null, decision: 'pending', newsIds: news.map((x) => x.id) },
@@ -291,6 +291,18 @@ export class LedgerModel {
     this.touchSource('quotes', t);
     this.touchSource('news', t);
     this.book.updatedAt = t;
+  }
+
+  /** Bounded news, but never evict evidence for open positions or candidates still in flight. */
+  private trimNews(list: NewsItem[]): NewsItem[] {
+    const keep = new Set([...this.book.positions.map((p) => p.candidateId), ...Object.values(this.book.candidates).filter((c) => c.decision === 'pending').map((c) => c.taskId)]);
+    const out: NewsItem[] = [];
+    let free = 0;
+    for (const n of list) {
+      if (n.candidateId && keep.has(n.candidateId)) out.push(n);
+      else if (free++ < 30) out.push(n);
+    }
+    return out;
   }
 
   private trimCandidates() {
@@ -455,6 +467,7 @@ export class LedgerModel {
   private reevaluate() {
     this.book.positions = this.book.positions.map((p) => {
       if (p.pairedWith) return p; // hedge legs are judged as a pair, not individually
+      if (p.exit?.status === 'partial') return p; // an exit in progress keeps its recommendation
       const gain = (p.mark - p.avgPrice) / p.avgPrice;
       const rec = gain < -0.25 ? 'close' : gain > 0.1 ? 'reduce' : 'hold';
       const rationale =

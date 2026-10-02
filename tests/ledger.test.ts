@@ -81,3 +81,20 @@ describe('Aster Ledger paper book', () => {
     for (const e of events.filter((e) => e.taskId?.startsWith('cand-'))) expect(e.businessId).toBe('aster-ledger');
   });
 });
+
+describe('Aster Ledger evidence retention and outage', () => {
+  it('every open position keeps at least one news item after a long run', () => {
+    const sim = new DemoSim(7, 'steady');
+    for (let t = sim.t; t < sim.loadAt + 25 * 60_000; t += 10_000) sim.advanceTo(t);
+    const book = sim.truth.ledger['aster-ledger']!;
+    for (const p of book.positions) expect(book.news.some((n) => n.candidateId === p.candidateId)).toBe(true);
+  });
+
+  it('provider outage: no new paper decisions before capacity resets', () => {
+    const sim = new DemoSim(7, 'ledger-provider-out');
+    for (let t = sim.t; t < sim.loadAt + 280_000; t += 5000) sim.advanceTo(t);
+    const book = sim.truth.ledger['aster-ledger']!;
+    const decided = Object.values(book.candidates).filter((c) => !c.taskId.startsWith('seed') && (c.decision === 'paper_entry' || c.decision === 'no_trade'));
+    expect(decided.length).toBe(0);
+  });
+});

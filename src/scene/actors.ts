@@ -33,6 +33,8 @@ export interface ActorDraw {
 }
 
 const SPEED = 42; // world units per second
+/** Characters are drawn larger than the furniture grid, as in the mockup. */
+const S = 1.4;
 
 export class ActorSystem {
   private actors = new Map<string, Actor>();
@@ -227,16 +229,16 @@ export class ActorSystem {
       const outline = a.id === selected ? '#3ee6ff' : a.id === hover ? '#d6f7ff' : undefined;
       const spr = characterSprite(w.id, w.appearance, a.pose, frame, a.flip, a.tint, outline);
       const seatedLift = a.pose === 'sit' || a.pose === 'type' || a.pose === 'slump' ? 2 : 0;
-      const x = Math.round(sx - CHAR_W / 2);
-      const y = Math.round(sy - CHAR_H + seatedLift);
+      const x = Math.round(sx - (CHAR_W * S) / 2);
+      const y = Math.round(sy - CHAR_H * S + seatedLift * S);
       if (a.id === selected) glow(ctx, sx, sy - 10, '#3ee6ff', 20, 0.6);
       // soft shadow
-      px(ctx, sx - 4, sy - 1, 'rgba(0,0,0,0.35)', 8, 2);
-      ctx.drawImage(spr, x, y);
+      px(ctx, sx - 6, sy - 1, 'rgba(0,0,0,0.35)', 12, 2);
+      ctx.drawImage(spr, x, y, CHAR_W * S, CHAR_H * S);
       if (a.icon) {
         const ic = iconSprite(a.icon);
         const bob = a.icon === 'hourglass' && a.animated ? Math.floor(t / 500) % 2 : 0;
-        ctx.drawImage(ic, Math.round(sx - 5), y - 13 - bob);
+        ctx.drawImage(ic, Math.round(sx - 5), y - 12 - bob);
       }
       if (a.pose === 'coffee' && a.animated) {
         for (let k = 0; k < 2; k++) {
@@ -255,7 +257,7 @@ export class ActorSystem {
     let bestDepth = -Infinity;
     for (const a of this.actors.values()) {
       const [sx, sy] = this.scene.toScreen(a.pos);
-      if (p[0] >= sx - 7 && p[0] <= sx + 7 && p[1] >= sy - CHAR_H - 2 && p[1] <= sy + 1) {
+      if (p[0] >= sx - 10 && p[0] <= sx + 10 && p[1] >= sy - CHAR_H * S - 2 && p[1] <= sy + 1) {
         const depth = a.pos[0] + a.pos[1];
         if (depth > bestDepth) {
           bestDepth = depth;

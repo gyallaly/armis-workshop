@@ -72,7 +72,14 @@ function BookSummary({ book }: { book: LedgerBook }) {
   );
 }
 
+const SOURCE_FRESH_MS = 60_000;
+
 function Sources({ book, now }: { book: LedgerBook; now: Millis }) {
+  const conn = useWorkshop((s) => s.connection);
+  const live = conn === 'demo' || conn === 'connected';
+  // Freshness is judged here from age, never trusted as a stored label.
+  const stateOf = (s: LedgerBook['sources'][number]) =>
+    !live ? 'stale' : s.lastAt === null ? 'unknown' : s.state === 'conflicting' ? 'conflicting' : now - s.lastAt < SOURCE_FRESH_MS ? 'fresh' : 'stale';
   return (
     <section aria-labelledby="src-h">
       <h3 id="src-h" className="sub">
@@ -81,7 +88,7 @@ function Sources({ book, now }: { book: LedgerBook; now: Millis }) {
       <ul className="plain">
         {book.sources.map((s) => (
           <li key={s.id} className="srcrow">
-            <span className={`fresh fresh--${s.state}`}>{s.state}</span>
+            <span className={`fresh fresh--${stateOf(s)}`}>{stateOf(s)}</span>
             <span>{s.label}</span>
             <span className="muted small">{s.lastAt ? relTime(now, s.lastAt) : 'never'}</span>
           </li>
@@ -127,7 +134,8 @@ export function VenueBoard({ book, candidate, now }: { book: LedgerBook; candida
                 <span className={`compat compat--${q.ruleCompat}`} title={q.ruleNote}>
                   rules: {q.ruleCompat}
                 </span>
-                {best ? <span className="chip chip--best">Best observed net price</span> : null}
+                {best && !age.stale ? <span className="chip chip--best">Best observed net price</span> : null}
+                {best && age.stale ? <span className="chip">was best at decision; quote now stale</span> : null}
               </span>
               <span role="cell" className="mono">
                 {q.bid === null ? '-' : `${q.bid.toFixed(2)} / ${q.ask!.toFixed(2)}`}

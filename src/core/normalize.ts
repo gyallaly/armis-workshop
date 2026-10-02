@@ -27,5 +27,10 @@ export function normalizeEvent(e: ActivityEvent): ActivityEvent | null {
     const c = p.capacity as Record<string, any> | undefined;
     if (!c || typeof c.id !== 'string' || !c.availability || !c.remaining || !c.resetAt || !c.local) return null;
   }
+  if (e.type === 'ledger.updated') {
+    const b = p.book as Record<string, any> | undefined;
+    const arrays = ['positions', 'news', 'traders', 'sources', 'venues', 'equityHistory', 'operatingCosts', 'history'];
+    if (!b || b.paper !== true || arrays.some((k) => !Array.isArray(b[k])) || typeof b.candidates !== 'object') return null;
+  }
   return { ...e, payload: p };
 }
