@@ -349,10 +349,49 @@ function TaskDetail({ state, task }: { state: WorkshopState; task: Task }) {
   );
 }
 
+function FeaturedWorker({ state }: { state: WorkshopState }) {
+  // The most recently observed worker who is actually working right now.
+  const recent = [...state.timeline].reverse().find((e) => e.workerId && displayStatus(state, state.workers[e.workerId]!).state === 'active' && !state.workers[e.workerId]!.id.startsWith('w-echo'));
+  const w = recent?.workerId ? state.workers[recent.workerId] : undefined;
+  if (!w) return null;
+  const d = displayStatus(state, w);
+  const task = d.status?.taskId ? state.tasks[d.status.taskId] : undefined;
+  const b = BUSINESS_BY_ID[w.businessId]!;
+  return (
+    <section className="featured" aria-label="Featured worker">
+      <div className="featured__card" style={{ ['--brand' as string]: b.brand.colors.accent }}>
+        <Avatar worker={w} state={d.state} size={104} />
+        <div className="featured__who">
+          <div className="featured__name">{w.name}</div>
+          <div className="muted">{b.brand.displayName}</div>
+          <div className="muted">{w.role}</div>
+          <StateBadge state={d.state} />
+        </div>
+      </div>
+      {task ? (
+        <div className="featured__task">
+          <div className="sub sub--flush">Current task</div>
+          <div className="featured__title">
+            <Icon name="doc" /> {task.title}
+          </div>
+          <div className="small muted">{d.status?.action ?? '-'}</div>
+          <div className="small muted">
+            {stageLabel(task.stage)} · in state {elapsed(state.now, d.status?.stateSince)}
+          </div>
+        </div>
+      ) : null}
+      <button className="btn btn--primary btn--wide" onClick={() => selectWorker(w)}>
+        <Icon name="user" /> View worker
+      </button>
+    </section>
+  );
+}
+
 function Feed({ state }: { state: WorkshopState }) {
   const view = useUi((s) => s.view);
+  const [all, setAll] = useState(false);
   const biz = view.mode === 'interior' ? view.businessId : null;
-  const entries = state.timeline.filter((e) => !biz || e.businessId === biz).slice(-14).reverse();
+  const entries = state.timeline.filter((e) => !biz || e.businessId === biz).slice(all ? -40 : -7).reverse();
   const roster = biz ? workersIn(state, biz) : [];
   return (
     <section className="detail" aria-labelledby="feed-h">
@@ -383,8 +422,12 @@ function Feed({ state }: { state: WorkshopState }) {
         </>
       ) : null}
       {biz && TRADING_BUSINESSES.has(biz) ? <LedgerPanel businessId={biz} /> : null}
-      <h2 id="feed-h" className="panel__h">
-        Recent events
+      {!biz ? <FeaturedWorker state={state} /> : null}
+      <h2 id="feed-h" className="panel__h panel__h--row">
+        <span>Recent events</span>
+        <button className="link small" onClick={() => setAll(!all)} aria-expanded={all}>
+          {all ? 'Fewer' : 'All activity →'}
+        </button>
       </h2>
       {!entries.length ? <p className="empty">{state.connection === 'disconnected' ? 'Not connected: no events observed.' : 'Waiting for events...'}</p> : null}
       <ol className="feed">

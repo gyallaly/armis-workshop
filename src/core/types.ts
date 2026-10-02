@@ -470,6 +470,8 @@ export interface LedgerBook {
   realized: number;
   unrealized: number;
   drawdownPct: number;
+  /** Running peak, kept separately so drawdown survives history trimming. */
+  peakEquity: number;
   equityHistory: { at: Millis; equity: number }[];
   /** Operating costs (AI usage etc.) are kept apart from trading P&L. */
   operatingCosts: { label: string; amount: number; provenance: Provenance }[];

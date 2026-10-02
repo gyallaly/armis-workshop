@@ -43,7 +43,8 @@ export type ScenarioId =
   | 'ledger-stale-quotes'
   | 'ledger-conflicting'
   | 'ledger-failed-audit'
-  | 'ledger-no-opportunity';
+  | 'ledger-no-opportunity'
+  | 'ledger-provider-out';
 
 export interface Scenario {
   id: ScenarioId;
@@ -81,6 +82,7 @@ export const SCENARIOS: Scenario[] = [
   { id: 'ledger-stale-quotes', label: 'Ledger: stale quotes', description: 'Aster Ledger venue quotes go stale; audit rejects candidates it cannot price.', outages: [] },
   { id: 'ledger-conflicting', label: 'Ledger: conflicting sources', description: 'Aster Ledger news contradicts itself; rules rejects candidates.', outages: [] },
   { id: 'ledger-failed-audit', label: 'Ledger: failed audit', description: 'Aster Ledger audit catches a mis-cited primary source and rejects.', outages: [] },
+  { id: 'ledger-provider-out', label: 'Ledger: provider unavailable', description: 'Codex and Gemini both out; Aster Ledger candidates wait for capacity and nothing is decided.', outages: [] },
   { id: 'ledger-no-opportunity', label: 'Ledger: no eligible opportunity', description: 'Aster Ledger candidates all clear checks but none clears the edge threshold.', outages: [] },
 ];
 
@@ -326,8 +328,9 @@ export class DemoSim {
   private scriptCapacity() {
     const t0 = DEMO_EPOCH;
     const id = this.scenario.id;
-    if (id === 'codex-reset' || id === 'all-unavailable') {
+    if (id === 'codex-reset' || id === 'all-unavailable' || id === 'ledger-provider-out') {
       const resetAt = this.loadAt + (id === 'codex-reset' ? 180_000 : 300_000);
+      void 0;
       this.at(t0 + 20_000, () => {
         Object.assign(this.caps['cap-codex']!, {
           availability: 'unavailable',
@@ -355,7 +358,7 @@ export class DemoSim {
         this.emitCap(this.caps['cap-codex']!);
       });
     }
-    if (id === 'all-unavailable') {
+    if (id === 'all-unavailable' || id === 'ledger-provider-out') {
       this.at(t0 + 20_000, () => {
         Object.assign(this.caps['cap-gemini']!, {
           availability: 'unavailable',

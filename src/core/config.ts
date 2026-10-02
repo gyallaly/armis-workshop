@@ -13,11 +13,11 @@ function depts(businessId: string, kinds: [DepartmentKind, string, number][]): D
 }
 
 const STANDARD: [DepartmentKind, string, number][] = [
-  ['research', 'Research', 2],
+  ['research', 'Research', 3],
   ['creation', 'Creation', 3],
-  ['audit', 'Audit', 2],
+  ['audit', 'Audit', 3],
   ['lounge', 'Lounge', 0],
-  ['fixes', 'Fixes', 2],
+  ['fixes', 'Fixes', 3],
 ];
 
 export const BUSINESSES: Business[] = [

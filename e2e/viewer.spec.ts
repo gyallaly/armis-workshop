@@ -161,3 +161,34 @@ test('usable at 1280x720', async ({ page }) => {
   await expect(page.getByRole('tab', { name: 'Tasks' })).toBeInViewport();
   await expect(page.getByRole('button', { name: 'Zoom in' })).toBeInViewport();
 });
+
+test('Aster Ledger: DEMO/PAPER labelled, paper book, venue board, news drawer, no order control', async ({ page }) => {
+  await open(page);
+  const label = page.getByRole('button', { name: /Enter Aster Ledger/ });
+  await expect(label.getByText('DEMO / PAPER')).toBeVisible();
+  await label.click();
+  await expect(page.getByRole('group', { name: 'Trader Watch department' })).toBeVisible();
+  const p = panel(page);
+  await expect(p.getByText('DEMO · PAPER TRADING')).toBeVisible();
+  await expect(p.getByText('Start bankroll')).toBeVisible();
+  await expect(p.getByText('$20.00')).toBeVisible();
+  await expect(p.getByText(/Operating costs/)).toBeVisible();
+  await expect(p.getByRole('table', { name: /Venue comparison/ })).toBeVisible();
+  await expect(p.getByText('Polymarket US').first()).toBeVisible();
+  await expect(p.getByText(/breaks the hedge/).first()).toBeVisible();
+  await expect(p.getByText(/Simulated exit/).first()).toBeVisible();
+  // nothing on the page offers to place, buy or sell
+  await expect(page.getByRole('button', { name: /place|bet|buy|sell|order/i })).toHaveCount(0);
+  await p.getByRole('button', { name: /Open news & evidence drawer/ }).click();
+  const d = page.getByRole('dialog', { name: 'News & evidence' });
+  await expect(d.getByText(/published .* observed/).first()).toBeVisible();
+  await expect(d.getByText('primary source').first()).toBeVisible();
+});
+
+test('Aster Ledger conflicting-sources scenario shows contradictions', async ({ page }) => {
+  await open(page);
+  await page.getByLabel('Scenario').selectOption('ledger-conflicting');
+  await page.getByRole('button', { name: /Enter Aster Ledger/ }).click();
+  await panel(page).getByRole('button', { name: /Open news & evidence drawer/ }).click();
+  await expect(page.getByRole('dialog', { name: 'News & evidence' }).getByText(/Contradicts:/).first()).toBeVisible();
+});

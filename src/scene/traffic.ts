@@ -57,7 +57,7 @@ export function drawDots(ctx: Ctx, dots: { dot: TrafficDot; route: Pt[] }[], now
         px(ctx, tail[0] - 1, tail[1] - 1, st.color, 2, 2);
       }
     }
-    glow(ctx, at[0], at[1], st.color, dot.id === selected ? 18 : 12, 0.9);
+    glow(ctx, at[0], at[1], st.color, dot.id === selected ? 24 : 16, 1);
     const [x, y] = [Math.round(at[0]), Math.round(at[1])];
     switch (st.shape) {
       case 'diamond':
@@ -99,7 +99,11 @@ export function drawGuide(ctx: Ctx, route: Pt[], color: string, t: number, motio
   const off = motion ? (t / 60) % 6 : 0;
   for (let d = off; d < total; d += 6) {
     const [x, y] = pointAlong(route, d / total);
-    px(ctx, x - 1, y, color, 2, 1);
+    px(ctx, x - 1, y - 1, color, 3, 2);
+  }
+  for (let d = off; d < total; d += 12) {
+    const [x, y] = pointAlong(route, d / total);
+    glow(ctx, x, y, color, 8, 0.35);
   }
   // arrowheads
   for (const k of [0.33, 0.66, 0.97]) {

@@ -49,8 +49,8 @@ export interface InteriorScene {
   drawAmbient(ctx: Ctx, t: number, motion: boolean): void;
 }
 
-const WALL_H = 48;
-const PART_H = 30;
+const WALL_H = 60;
+const PART_H = 36;
 const LOW_H = 20;
 const CORR_Y0 = 100;
 const CORR_Y1 = 132;
@@ -197,15 +197,15 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
     const y1 = spec.row === 0 ? CORR_Y0 : 236;
     const { x0, x1 } = spec;
     // wood floor
-    const wood = spec.kind === 'lounge' ? '#6e4a30' : isL ? (spec.kind === 'audit' ? '#2e4448' : '#3a3440') : '#5e4330';
+    const wood = spec.kind === 'lounge' ? '#7c5435' : isL ? (spec.kind === 'audit' ? '#2e4448' : '#3a3440') : '#6c4d36';
     top(ctx, iso, x0, y0, x1, y1, 0, wood);
     for (let x = x0; x < x1; x += 5) top(ctx, iso, x, y0, x + 1, y1, 0, shade(wood, 0.82));
     for (let y = y0 + 3; y < y1; y += 17) for (let x = x0 + ((y * 7) % 10); x < x1; x += 10) top(ctx, iso, x, y, x + 5, y + 1, 0, shade(wood, 0.88));
     stippleTop(ctx, iso, x0, y0, x1, y1, 0, shade(wood, 1.12), 0.04, x0 + y0);
 
     const back = spec.row === 0 ? WALL_H : LOW_H;
-    const wallL = isU ? '#2b3550' : isHQ ? '#2f3448' : isL ? '#22383c' : '#3e3330';
-    const wallR = isU ? '#36435f' : isHQ ? '#3a4058' : isL ? '#2b4549' : '#4a3d38';
+    const wallL = isU ? '#6a5643' : isHQ ? '#2f3448' : isL ? '#22383c' : '#5a4636';
+    const wallR = isU ? '#857058' : isHQ ? '#3a4058' : isL ? '#2b4549' : '#6e5844';
     const glass = isL && spec.kind === 'audit';
     const cap = '#14161d';
     // back-right wall (plane wy = y0) and back-left wall (plane wx = x0)
@@ -272,6 +272,7 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
       label: [iso.x(x0 + 6, y0), iso.y(x0 + 6, y0, back + 6)],
     };
     furnish(ctx, iso, room, dept.desks, spec.kind, back, lights, lounge, accent, rnd, b);
+    if (!isL && spec.row === 0) wallDecor(ctx, iso, room, back, lights, rnd);
     rooms.push(room);
 
     // low front ledges (cutaway walls) with a door gap toward the corridor
@@ -409,7 +410,8 @@ function deskAt(ctx: Ctx, iso: Iso, x: number, y: number, monitors: number, ligh
   const ly = iso.y(x + 1, y + 2, 9);
   px(ctx, lx, ly - 6, '#2a2d38', 1, 6);
   px(ctx, lx - 1, ly - 8, '#ffd88a', 3, 2);
-  lights.push({ x: lx, y: ly - 6, c: '#ffbe5c', r: 14, a: 0.5 });
+  lights.push({ x: lx, y: ly - 6, c: '#ffbe5c', r: 20, a: 0.55 });
+  lights.push({ x: lx + 6, y: ly + 6, c: '#ffcc80', r: 24, a: 0.25 });
   // chair
   const cx = x + 9;
   const cyy = y + 17;
@@ -702,4 +704,28 @@ function furnishTrading(ctx: Ctx, iso: Iso, room: Room, desks: number, kind: Dep
   const deskY = room.row === 0 ? y0 + 20 : y0 + 30;
   for (let i = 0; i < n; i++) room.seats.push(deskAt(ctx, iso, startX + i * step, deskY, 3, lights));
   plant(ctx, iso, x1 - 8, y1 - 10, x0 + 5, room.row === 0);
+}
+
+/** Framed posters, a clock and warm wall sconces on the upper back walls. */
+function wallDecor(ctx: Ctx, iso: Iso, room: Room, wallH: number, lights: Lights, rnd: () => number) {
+  const { x0, x1, y0, y1 } = room;
+  const frames = ['#d9a441', '#3c7ab0', '#a8433a', '#4f8a50', '#efeae0'];
+  // posters high on the back wall
+  for (let u = x0 + 10; u < x1 - 16; u += 34) {
+    const w = 10 + Math.floor(rnd() * 6);
+    const z0 = wallH - 16;
+    left(ctx, iso, y0, u, u + w, z0, z0 + 11, '#2a2018');
+    left(ctx, iso, y0, u + 1, u + w - 1, z0 + 1, z0 + 10, frames[Math.floor(rnd() * frames.length)]!);
+    left(ctx, iso, y0, u + 3, u + w - 3, z0 + 3, z0 + 7, '#f4ede0');
+  }
+  // sconces with light pools
+  for (let u = x0 + 26; u < x1 - 8; u += 40) {
+    left(ctx, iso, y0, u, u + 2, wallH - 26, wallH - 23, '#ffe0a0');
+    lights.push({ x: iso.x(u + 1, y0), y: iso.y(u + 1, y0, wallH - 24), c: '#ffcc80', r: 26, a: 0.45 });
+  }
+  // side-wall frames
+  for (let v = y0 + 10; v < y1 - 14; v += 30) {
+    right(ctx, iso, x0, v, v + 9, wallH - 22 - (x0 > 0 ? 24 : 0), wallH - 12 - (x0 > 0 ? 24 : 0), '#2a2018');
+    right(ctx, iso, x0, v + 1, v + 8, wallH - 21 - (x0 > 0 ? 24 : 0), wallH - 13 - (x0 > 0 ? 24 : 0), frames[Math.floor(rnd() * frames.length)]!);
+  }
 }

@@ -93,6 +93,7 @@ export class LedgerModel {
       realized: 0,
       unrealized: 0,
       drawdownPct: 0,
+      peakEquity: STARTING_BANKROLL,
       equityHistory: [{ at: t0, equity: STARTING_BANKROLL }],
       operatingCosts: [
         { label: 'AI provider usage (this session)', amount: 0, provenance: 'estimated' },
@@ -161,15 +162,44 @@ export class LedgerModel {
       pairedWith: 'pos-2',
       hedgeWarning: 'Exiting this leg alone breaks the hedge with pos-2.',
     };
-    this.book.positions = [p1, p2, p3];
+    const p4: Position = {
+      id: 'pos-4',
+      candidateId: 'seed-jobs',
+      contract: 'Jobs growth > 2.0% (first print) (fictional)',
+      venueId: 'kalshi',
+      side: 'YES',
+      qty: 3,
+      avgPrice: 0.5,
+      mark: 0.34,
+      recommendation: 'close',
+      rationale: 'Thesis weakened: mark fell well below entry. Research suggests closing. Recommendation only.',
+      netExitValue: 0,
+      liquidityWarning: 'Spread is wide (0.06); a close would cross it.',
+    };
+    this.book.positions = [p1, p2, p3, p4];
+    this.seedEvidence(t);
     // 2 contracts of pos-1 already exited at 0.46
     p1.qty = 4;
     this.book.realized = round(2 * (0.46 - 0.42));
-    const cost = 4 * 0.42 + 5 * 0.31 + 5 * 0.64;
+    const cost = 4 * 0.42 + 5 * 0.31 + 5 * 0.64 + 3 * 0.5;
     this.book.reserved = round(cost);
     this.book.available = round(STARTING_BANKROLL - cost - 2 * 0.42 + 2 * 0.46);
     this.book.history.push({ at: t, text: 'Opening paper book loaded (simulated).' });
     this.revalue(t);
+  }
+
+  /** Evidence for the opening positions so every position links to its sources. */
+  private seedEvidence(t: Millis) {
+    const seeds: [string, number, 'paper_entry'][] = [
+      ['seed-levy', 0, 'paper_entry'],
+      ['seed-port', 1, 'paper_entry'],
+      ['seed-jobs', 2, 'paper_entry'],
+    ];
+    for (const [id, k] of seeds) {
+      this.addCandidate(id, k, t - 20 * 60_000);
+      const c = this.book.candidates[id]!;
+      this.book.candidates[id] = { ...c, decision: 'paper_entry', reason: 'Opening paper position (seeded for the demo)', estimate: 0.5 };
+    }
   }
 
   private quotesFor(taskId: string, tpl: CandidateTemplate, t: Millis): VenueQuote[] {
@@ -267,14 +297,15 @@ export class LedgerModel {
     const ids = Object.keys(this.book.candidates);
     if (ids.length <= 30) return;
     const c = { ...this.book.candidates };
-    for (const id of ids.slice(0, ids.length - 30)) delete c[id];
+    const held = new Set(this.book.positions.map((p) => p.candidateId));
+    const removable = ids.filter((id) => c[id]!.decision !== 'pending' && !held.has(id));
+    for (const id of removable.slice(0, ids.length - 30)) delete c[id];
     this.book.candidates = c;
   }
 
   private touchSource(id: string, t: Millis) {
-    this.book.sources = this.book.sources.map((s) =>
-      s.id === id ? { ...s, lastAt: this.scenario === 'stale-quotes' && id === 'quotes' ? s.lastAt : t } : s,
-    );
+    if (id === 'quotes') return this.deriveQuoteFreshness(t);
+    this.book.sources = this.book.sources.map((s) => (s.id === id ? { ...s, lastAt: t } : s));
   }
 
   research(taskId: string, t: Millis) {
@@ -354,7 +385,8 @@ export class LedgerModel {
         netExitValue: 0,
         liquidityWarning: (best.depth ?? 0) < 30 ? 'Low depth: a full exit may not fill at the mark.' : undefined,
       };
-      this.book.positions = [...this.book.positions, pos].slice(-12);
+      // open positions are never trimmed: their cost stays in reserved until they close
+      this.book.positions = [...this.book.positions, pos];
       this.book.available = round(this.book.available - cost);
       this.book.reserved = round(this.book.reserved + cost);
       this.book.history = [...this.book.history, { at: t, text: reason }].slice(-40);
@@ -406,9 +438,33 @@ export class LedgerModel {
       this.book.available = round(this.book.available + price);
       this.book.history = [...this.book.history, { at: t, text: `Simulated partial fill on pos-1 at ${price.toFixed(2)}` }].slice(-40);
     }
-    if (this.scenario === 'stale-quotes') this.book.sources = this.book.sources.map((s) => (s.id === 'quotes' ? { ...s, state: 'stale' } : s));
-    this.touchSource('quotes', t);
+    this.deriveQuoteFreshness(t);
+    this.reevaluate();
     this.revalue(t);
+  }
+
+  /** The quotes source is as fresh as the newest quote actually held - never fresher. */
+  private deriveQuoteFreshness(t: Millis) {
+    let newest: number | null = null;
+    for (const c of Object.values(this.book.candidates)) for (const q of c.quotes) if (q.quoteAt !== null && (newest === null || q.quoteAt > newest)) newest = q.quoteAt;
+    const state = newest === null ? 'unknown' : t - newest < FRESH_MS ? 'fresh' : 'stale';
+    this.book.sources = this.book.sources.map((s) => (s.id === 'quotes' ? { ...s, lastAt: newest, state } : s));
+  }
+
+  /** Research recommendations follow the simulated marks (hold / reduce / close). */
+  private reevaluate() {
+    this.book.positions = this.book.positions.map((p) => {
+      if (p.pairedWith) return p; // hedge legs are judged as a pair, not individually
+      const gain = (p.mark - p.avgPrice) / p.avgPrice;
+      const rec = gain < -0.25 ? 'close' : gain > 0.1 ? 'reduce' : 'hold';
+      const rationale =
+        rec === 'close'
+          ? 'Thesis weakened: mark fell well below entry. Research suggests closing. Recommendation only.'
+          : rec === 'reduce'
+            ? 'Thesis mostly priced in; research suggests trimming size. Recommendation only.'
+            : 'Thesis intact; research suggests holding. Recommendation only.';
+      return { ...p, recommendation: rec, rationale };
+    });
   }
 
   private revalue(t: Millis) {
@@ -420,7 +476,8 @@ export class LedgerModel {
     this.book.unrealized = round(unreal);
     const equity = round(this.book.available + this.book.reserved + this.book.unrealized);
     const hist = [...this.book.equityHistory, { at: t, equity }].slice(-60);
-    const peak = Math.max(STARTING_BANKROLL, ...hist.map((h) => h.equity));
+    const peak = Math.max(this.book.peakEquity, equity);
+    this.book.peakEquity = peak;
     this.book.equityHistory = hist;
     this.book.drawdownPct = round(Math.max(0, ((peak - equity) / peak) * 100), 1);
     this.book.updatedAt = t;

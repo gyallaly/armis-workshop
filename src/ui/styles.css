@@ -711,6 +711,8 @@ textarea {
 }
 
 .stale--dark {
+  top: auto !important;
+  bottom: 70px;
   background: #0a0f1c !important;
   border-color: #59627a !important;
   color: #c7cedb !important;
@@ -1678,3 +1680,95 @@ textarea {
 .tstatus--rejected {
   color: var(--bad);
 }
+
+.featured {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.featured__card {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.featured__who {
+  display: grid;
+  gap: 2px;
+}
+.featured__name {
+  font: 700 26px var(--pixel);
+  letter-spacing: 0.04em;
+}
+.featured__task {
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface-2);
+  display: grid;
+  gap: 4px;
+}
+.featured__title {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-weight: 700;
+  font-size: 16px;
+}
+.sub--flush {
+  margin: 0;
+}
+.btn--wide {
+  width: 100%;
+  min-height: 46px;
+  font-size: 16px;
+}
+.feed__item {
+  position: relative;
+  padding-left: 16px !important;
+}
+.feed__item::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 13px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.feed__item.tl--audit::before { background: var(--violet); }
+.feed__item.tl--worker::before { background: #b9c7ff; }
+.feed__item.tl--task::before { background: var(--accent); }
+.feed__item.tl--capacity::before { background: var(--warn); }
+.feed__item.tl--redirect::before { background: var(--warn); }
+
+.cand {
+  display: grid;
+  grid-template-columns: 82px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-2);
+  cursor: pointer;
+  font-size: 13px;
+}
+.dec {
+  font: 700 10.5px var(--mono);
+  text-transform: uppercase;
+  text-align: center;
+  padding: 1px 4px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+.dec--paper_entry { color: var(--ok); }
+.dec--no_trade { color: #b9c7ff; }
+.dec--rejected { color: var(--bad); }
+.dec--pending { color: var(--warn); }

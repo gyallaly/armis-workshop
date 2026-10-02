@@ -2,6 +2,7 @@ import type { Candidate, LedgerBook, Millis, Position, VenueQuote } from '../cor
 import { ProvTag } from './CapacityPanel';
 import { clock, relTime } from './format';
 import { Icon } from './Icon';
+import { stageLabel } from '../core/reducer';
 import { ui, useWorkshop } from './store';
 
 /**
@@ -175,6 +176,9 @@ function PositionCard({ p, book }: { p: Position; book: LedgerBook }) {
       {p.exit ? <div className="small warn">{p.exit.note}</div> : null}
       {p.liquidityWarning ? <div className="small warn">⚠ {p.liquidityWarning}</div> : null}
       {p.hedgeWarning ? <div className="small bad">⚠ {p.hedgeWarning}</div> : null}
+      <button className="link small" onClick={() => ui.update({ newsFor: p.candidateId })}>
+        Evidence for this position
+      </button>
     </li>
   );
 }
@@ -196,7 +200,31 @@ export function LedgerPanel({ businessId }: { businessId: string }) {
         ))}
       </ul>
       <p className="small muted">Recommendations are research output only. This viewer has no order controls; nothing can be placed, sized or closed from here.</p>
+      <h3 className="sub">Candidates</h3>
+      <ul className="plain cands">
+        {[...candidates]
+          .reverse()
+          .slice(0, 10)
+          .map((c) => {
+            const task = state.tasks[c.taskId];
+            return (
+              <li key={c.taskId}>
+                <button className="cand" onClick={() => (task ? ui.select({ kind: 'task', id: c.taskId }) : ui.update({ newsFor: c.taskId }))}>
+                  <span className={`dec dec--${c.decision}`}>{c.decision.replace('_', ' ')}</span>
+                  <span>{c.question}</span>
+                  <span className="small muted">{task ? stageLabel(task.stage) : 'seeded'}</span>
+                </button>
+              </li>
+            );
+          })}
+      </ul>
+      <p className="small muted">
+        {candidates.filter((c) => c.decision === 'paper_entry').length} paper entries ·{' '}
+        {candidates.filter((c) => c.decision === 'no_trade').length} no trade · {candidates.filter((c) => c.decision === 'rejected').length} rejected ·{' '}
+        {candidates.filter((c) => c.decision === 'pending').length} in progress
+      </p>
       {focus ? <VenueBoard book={book} candidate={focus} now={state.now} /> : null}
+      <LedgerCapacity />
       <Sources book={book} now={state.now} />
       <h3 className="sub">Public trader research</h3>
       <ul className="plain">
@@ -241,5 +269,31 @@ export function CandidateDetail({ businessId, taskId }: { businessId: string; ta
       <PaperBanner />
       <VenueBoard book={book} candidate={c} now={state.now} />
     </>
+  );
+}
+
+/** Provider capacity as it affects the trading desk (shared scopes, not per worker). */
+function LedgerCapacity() {
+  const caps = useWorkshop((s) => s.capacity);
+  const list = Object.values(caps);
+  return (
+    <section aria-labelledby="lcap-h">
+      <h3 id="lcap-h" className="sub">
+        Provider capacity
+      </h3>
+      <ul className="plain">
+        {list.map((c) => (
+          <li key={c.id} className="srcrow">
+            <span className={`fresh fresh--${c.availability.value === 'available' ? 'fresh' : c.availability.value === 'unknown' ? 'unknown' : 'stale'}`}>{c.availability.value ?? 'unknown'}</span>
+            <span>
+              {c.provider} · {c.scope.label}
+            </span>
+            <button className="link small" onClick={() => ui.setPrefs({ tab: 'capacity' })}>
+              details
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

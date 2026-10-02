@@ -85,11 +85,19 @@ export class ActorSystem {
       return { room, index };
     };
 
+    let absent = 0;
     for (const w of workers) {
       const d = displayStatus(state, w);
+      if (d.state === 'offline' || d.state === 'unknown') {
+        // not present at a desk: a faded figure waits by the entrance, never animated
+        const i = absent++;
+        const at: Pt = [this.scene.entrance[0] + 14 + (i % 4) * 9, this.scene.entrance[1] - 8 + Math.floor(i / 4) * 9];
+        plans.push({ w, target: at, key: `absent:${i}`, pose: 'stand', flip: false, seat: null, d });
+        continue;
+      }
       const atDesk = d.state !== 'idle';
       if (atDesk) {
-        const dept = d.state === 'unknown' || d.state === 'offline' ? w.homeDepartmentId : d.departmentId;
+        const dept = d.departmentId;
         const seat = seatFor(w, dept);
         if (seat) {
           const pose: Pose = d.state === 'active' ? 'type' : d.state === 'failed' ? 'slump' : 'sit';

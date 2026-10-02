@@ -182,6 +182,22 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     box(ctx, iso, x, y, x + 12, y + 12, 0, 4, { top: '#1c3324', left: '#4b4e5c', right: '#3a3d49', rim: '#5d6172' });
   }
 
+  // benches with sitters along the plaza edges
+  for (const [bx, by] of [
+    [PLAZA.x0 + 26, PLAZA.y1 + 2],
+    [PLAZA.x0 + 60, PLAZA.y1 + 2],
+    [PLAZA.x1 + 2, PLAZA.y0 + 30],
+    [PLAZA.x1 + 2, PLAZA.y0 + 64],
+  ] as Pt[]) {
+    const sx = iso.x(bx, by);
+    const sy = iso.y(bx, by);
+    px(ctx, sx - 5, sy - 3, '#6b4a2f', 10, 2);
+    px(ctx, sx - 5, sy - 5, '#4a321f', 10, 1);
+    px(ctx, sx - 4, sy - 1, '#2a2b33', 1, 2);
+    px(ctx, sx + 3, sy - 1, '#2a2b33', 1, 2);
+    miniPerson(ctx, sx - 2, sy - 2, PEOPLE[(bx + by) % PEOPLE.length]!, true);
+  }
+
   // ------------------------------------------------- back-bank city & trees
   const far: [number, number, number, number, number][] = [];
   for (let row = 0; row < 3; row++)
@@ -228,13 +244,13 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   const free = (x: number, y: number) => !blocked.some((r) => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1);
 
   // trees: island + back bank
-  for (let i = 0; i < 420; i++) {
+  for (let i = 0; i < 760; i++) {
     const back = i < 260;
     const x = back ? -40 + rnd() * 560 : 6 + rnd() * (E - 40);
     const y = back ? (rnd() < 0.5 ? -40 + rnd() * 36 : -40 + rnd() * 560) : 6 + rnd() * (E - 40);
     if (back && x > -2 && y > -2) continue;
     if (!back && !free(x, y)) continue;
-    if (!back && rnd() < 0.35) continue;
+    if (!back && rnd() < 0.12) continue;
     const size = back ? 7 + rnd() * 5 : 6 + rnd() * 5;
     const kind = rnd() < (back ? 0.4 : 0.15) ? 'pine' : rnd() < 0.08 ? 'blossom' : 'round';
     const seed = (rnd() * 1e9) | 0;
@@ -292,7 +308,15 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     for (let k = 0; k < 4; k++) {
       const x = r.x0 + 8 + pr() * (r.x1 - r.x0 - 16);
       const y = r.y0 + 8 + pr() * (r.y1 - r.y0 - 16);
-      props.push({ wx: x, wy: y, draw: () => umbrellaTable(ctx, iso.x(x, y), iso.y(x, y), color) });
+      props.push({
+        wx: x,
+        wy: y,
+        draw: () => {
+          umbrellaTable(ctx, iso.x(x, y), iso.y(x, y), color);
+          miniPerson(ctx, iso.x(x, y) - 6, iso.y(x, y) - 1, PEOPLE[(seed + k) % PEOPLE.length]!, true);
+          if (pr() < 0.6) miniPerson(ctx, iso.x(x, y) + 6, iso.y(x, y) - 1, PEOPLE[(seed + k + 3) % PEOPLE.length]!, true);
+        },
+      });
       lights.push({ x: iso.x(x, y), y: iso.y(x, y) - 8, c: '#ffcf8a', r: 12, a: 0.35 });
     }
   };
@@ -337,7 +361,7 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   const routes: Record<string, Pt[]> = {};
   for (const [id, pts] of Object.entries(ROUTES_W)) {
     routes[id] = pts.map(([x, y]) => [iso.x(x, y), iso.y(x, y)]);
-    drawDotted(ctx, routes[id]!, '#1fb8d6', 4);
+    drawDotted(ctx, routes[id]!, '#3ee6ff', 5);
   }
 
   // water sample points for shimmer
@@ -349,6 +373,14 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     const [x, y] = side ? [along, E + off] : [E + off, along];
     shimmer.push([iso.x(x, y), iso.y(x, y, -8)]);
   }
+  // decorative pedestrians walking the walkways (ambient only - not workers)
+  const walkers: { route: Pt[]; speed: number; phase: number; look: Look }[] = [];
+  const walkRoutes: Pt[][] = [
+    ...Object.values(routes),
+    [[iso.x(10, E - 13), iso.y(10, E - 13)], [iso.x(E - 13, E - 13), iso.y(E - 13, E - 13)], [iso.x(E - 13, 10), iso.y(E - 13, 10)]],
+    [[iso.x(PLAZA.x0, PLAZA.y1 + 8), iso.y(PLAZA.x0, PLAZA.y1 + 8)], [iso.x(PLAZA.x1 + 8, PLAZA.y1 + 8), iso.y(PLAZA.x1 + 8, PLAZA.y1 + 8)], [iso.x(PLAZA.x1 + 8, PLAZA.y0), iso.y(PLAZA.x1 + 8, PLAZA.y0)]],
+  ];
+  for (let i = 0; i < 22; i++) walkers.push({ route: walkRoutes[i % walkRoutes.length]!, speed: 0.006 + rnd() * 0.01, phase: rnd(), look: PEOPLE[i % PEOPLE.length]! });
   const stars: Pt[] = [];
   for (let i = 0; i < 60; i++) stars.push([rnd() * W, rnd() * 90]);
   const fountainC: Pt = [iso.x(272, 272), iso.y(272, 272)];
@@ -360,6 +392,12 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     buildings: hits,
     routes,
     drawAmbient(g, t, motion) {
+      for (const w of walkers) {
+        const k = motion ? (w.phase + (t / 1000) * w.speed) % 2 : w.phase;
+        const along = k > 1 ? 2 - k : k;
+        const [x, y] = alongPath(w.route, along);
+        miniPerson(g, x, y, w.look, false, motion ? Math.floor(t / 220 + w.phase * 10) % 2 : 0);
+      }
       if (!motion) return;
       // water shimmer
       for (let i = 0; i < shimmer.length; i++) {
@@ -396,14 +434,15 @@ function drawDotted(ctx: Ctx, pts: Pt[], color: string, gap: number) {
     for (let d = 0; d < len; d += gap) {
       const x = ax + ((bx - ax) * d) / len;
       const y = ay + ((by - ay) * d) / len;
-      px(ctx, x, y, color, 2, 1);
+      px(ctx, x - 1, y - 1, color, 3, 2);
+      px(ctx, x, y - 1, '#c8fbff', 1, 1);
     }
   }
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, ay] = pts[i]!;
     const [bx, by] = pts[i + 1]!;
     const len = Math.hypot(bx - ax, by - ay);
-    for (let d = 0; d < len; d += 12) glow(ctx, ax + ((bx - ax) * d) / len, ay + ((by - ay) * d) / len, '#1fd2ff', 7, 0.25);
+    for (let d = 0; d < len; d += 8) glow(ctx, ax + ((bx - ax) * d) / len, ay + ((by - ay) * d) / len, '#1fd2ff', 10, 0.45);
   }
 }
 
@@ -411,37 +450,37 @@ function drawFountain(ctx: Ctx, iso: Iso, cx: number, cy: number) {
   const sx = iso.x(cx, cy);
   const sy = iso.y(cx, cy);
   // basin ellipse (rim + water)
-  for (let y = -14; y <= 14; y++)
-    for (let x = -30; x <= 30; x++) {
-      const d = (x / 30) ** 2 + (y / 14) ** 2;
+  for (let y = -20; y <= 20; y++)
+    for (let x = -42; x <= 42; x++) {
+      const d = (x / 42) ** 2 + (y / 20) ** 2;
       if (d > 1) continue;
       const c = d > 0.8 ? '#6a6f84' : d > 0.68 ? '#4b5063' : mix('#0f5a8a', '#1a86c2', 1 - d);
       px(ctx, sx + x, sy + y, c);
     }
   // rim front thickness
-  for (let x = -30; x <= 30; x++) {
-    const y = Math.round(14 * Math.sqrt(Math.max(0, 1 - (x / 30) ** 2)));
+  for (let x = -42; x <= 42; x++) {
+    const y = Math.round(20 * Math.sqrt(Math.max(0, 1 - (x / 42) ** 2)));
     px(ctx, sx + x, sy + y, '#3b3f4e', 1, 3);
   }
-  glow(ctx, sx, sy, '#38b6ff', 34, 0.7);
+  glow(ctx, sx, sy, '#38b6ff', 52, 0.85);
   // pedestal
-  px(ctx, sx - 3, sy - 10, '#7d8296', 6, 10);
-  px(ctx, sx - 5, sy - 11, '#9aa0b5', 10, 2);
+  px(ctx, sx - 3, sy - 14, '#7d8296', 6, 14);
+  px(ctx, sx - 6, sy - 15, '#9aa0b5', 12, 2);
   // globe (wireframe sphere)
-  const gy = sy - 22;
-  for (let y = -9; y <= 9; y++)
-    for (let x = -9; x <= 9; x++) {
+  const gy = sy - 28;
+  for (let y = -13; y <= 13; y++)
+    for (let x = -13; x <= 13; x++) {
       const d = Math.sqrt(x * x + y * y);
-      if (d > 9) continue;
-      const onRim = d > 8;
+      if (d > 13) continue;
+      const onRim = d > 12;
       const lat = Math.abs(y) % 4 === 0;
-      const lon = Math.abs(Math.round(x / Math.cos(Math.asin(Math.min(1, Math.abs(y) / 9.5))))) % 4 === 0;
+      const lon = Math.abs(Math.round(x / Math.cos(Math.asin(Math.min(1, Math.abs(y) / 13.5))))) % 4 === 0;
       if (onRim || lat || lon) px(ctx, sx + x, gy + y, onRim ? '#bfe9ff' : '#58c4ff');
       else px(ctx, sx + x, gy + y, '#123a66');
     }
-  px(ctx, sx - 11, gy - 1, '#d9a441', 22, 1);
-  px(ctx, sx - 1, gy - 12, '#d9a441', 2, 3);
-  glow(ctx, sx, gy, '#58c4ff', 30, 0.9);
+  px(ctx, sx - 16, gy - 1, '#d9a441', 32, 1);
+  px(ctx, sx - 1, gy - 17, '#d9a441', 2, 4);
+  glow(ctx, sx, gy, '#58c4ff', 44, 1);
 }
 
 function windowGrid(
@@ -471,12 +510,14 @@ function windowGrid(
         left(ctx, iso, plane, u, u + ww, z, z + wh, c);
         left(ctx, iso, plane, u, u + ww, z + wh - 1, z + wh, lit ? '#fff1c9' : C.glassHi);
         if (lit && r() < 0.5) left(ctx, iso, plane, u + 2, u + 3, z, z + 3, '#3a2a1e');
+        if (lit && r() < 0.55) left(ctx, iso, plane, u + ww - 3, u + ww - 1, z + 1, z + 3, '#5ad1ff');
         if (!lit) left(ctx, iso, plane, u + 1, u + 2, z + 2, z + wh - 2, C.glassHi);
         if (lit) lights.push({ x: iso.x(u + ww / 2, plane), y: iso.y(u + ww / 2, plane, z + wh / 2), c: '#ffbf5a', r: 10, a: 0.3 });
       } else {
         right(ctx, iso, plane, u, u + ww - 1, z, z + wh, c);
         right(ctx, iso, plane, u, u + ww - 1, z + wh - 1, z + wh, lit ? '#fff1c9' : C.glassHi);
         if (lit && r() < 0.5) right(ctx, iso, plane, u + 2, u + 2, z, z + 3, '#3a2a1e');
+        if (lit && r() < 0.55) right(ctx, iso, plane, u + ww - 3, u + ww - 2, z + 1, z + 3, '#5ad1ff');
         if (!lit) right(ctx, iso, plane, u + 4, u + 4, z + 2, z + wh - 2, C.glassHi);
         if (lit) lights.push({ x: iso.x(plane, u + ww / 2), y: iso.y(plane, u + ww / 2, z + wh / 2), c: '#ffbf5a', r: 10, a: 0.25 });
       }
@@ -796,8 +837,58 @@ function drawTrading(ctx: Ctx, iso: Iso, r: Rect, lights: { x: number; y: number
   return {
     id: 'aster-ledger',
     hull: hullOf(iso, r, h + 26),
-    label: [iso.x((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), iso.y((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, h + 40)],
+    label: [iso.x(r.x1 + 10, r.y0 + 20), iso.y(r.x1 + 10, r.y0 + 20, h + 6)],
     focus: [iso.x((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), iso.y((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 24)],
     door: [iso.x(...AL_DOOR), iso.y(...AL_DOOR)],
   };
+}
+
+interface Look {
+  skin: string;
+  top: string;
+  legs: string;
+  hair: string;
+}
+
+const PEOPLE: Look[] = [
+  { skin: '#e0ac82', top: '#3c7ab0', legs: '#22283a', hair: '#2b1d14' },
+  { skin: '#8d5a3b', top: '#c0703a', legs: '#2a2420', hair: '#111111' },
+  { skin: '#f1c7a3', top: '#7a5c8f', legs: '#2c2533', hair: '#8a3b1f' },
+  { skin: '#a8714a', top: '#4f7a52', legs: '#1f2229', hair: '#3b2416' },
+  { skin: '#efc9a8', top: '#d8d2c4', legs: '#353b52', hair: '#c98b3a' },
+  { skin: '#6b4126', top: '#a8433a', legs: '#22201e', hair: '#1a1a1a' },
+];
+
+/** Tiny decorative campus figure (5x10 art px), feet at (x, y). */
+function miniPerson(ctx: Ctx, x: number, y: number, l: Look, sitting: boolean, frame = 0) {
+  const X = Math.round(x) - 2;
+  const Y = Math.round(y);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.fillRect(X - 1, Y - 1, 6, 1);
+  if (sitting) {
+    px(ctx, X + 1, Y - 3, l.legs, 3, 2);
+    px(ctx, X, Y - 7, l.top, 5, 4);
+    px(ctx, X + 1, Y - 10, l.skin, 3, 3);
+    px(ctx, X + 1, Y - 11, l.hair, 3, 1);
+    return;
+  }
+  px(ctx, X + (frame ? 0 : 1), Y - 4, l.legs, 1, 4);
+  px(ctx, X + (frame ? 3 : 2), Y - 4, l.legs, 1, 4);
+  px(ctx, X, Y - 8, l.top, 5, 4);
+  px(ctx, X + 1, Y - 11, l.skin, 3, 3);
+  px(ctx, X + 1, Y - 12, l.hair, 3, 1);
+}
+
+function alongPath(pts: Pt[], k: number): Pt {
+  let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) total += Math.hypot(pts[i + 1]![0] - pts[i]![0], pts[i + 1]![1] - pts[i]![1]);
+  let d = k * total;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i]!;
+    const [bx, by] = pts[i + 1]!;
+    const seg = Math.hypot(bx - ax, by - ay);
+    if (d <= seg) return [ax + ((bx - ax) * d) / seg, ay + ((by - ay) * d) / seg];
+    d -= seg;
+  }
+  return pts[pts.length - 1]!;
 }

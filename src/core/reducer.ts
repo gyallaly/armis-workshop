@@ -130,6 +130,7 @@ export function applySnapshot(state: WorkshopState, snap: Snapshot, connection: 
   for (const t of snap.tasks) entityClock[`task:${t.id}`] = t.updatedAt;
   const capacity = Object.fromEntries(snap.capacity.map((c) => [c.id, c]));
   for (const c of snap.capacity) entityClock[`capacity:${c.id}`] = c.lastCheckedAt ?? snap.takenAt;
+  for (const id of Object.keys(snap.ledger ?? {})) entityClock[`ledger:${id}`] = snap.takenAt;
   const timeline = snap.timeline ? mergeTimeline(state.timeline, snap.timeline) : state.timeline;
   const taskTimeline = { ...state.taskTimeline };
   if (snap.timeline) {

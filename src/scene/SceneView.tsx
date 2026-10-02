@@ -42,10 +42,10 @@ function interiorOf(sc: Scenes, id: string): InteriorScene {
 function cameraFor(sc: Scenes, key: string): Camera {
   let c = sc.cameras.get(key);
   if (!c) {
-    if (key === 'campus') c = new Camera(sc.campus.width, sc.campus.height, { x0: 170, y0: 150, x1: 930, y1: 660 }, 0.85, 4);
+    if (key === 'campus') c = new Camera(sc.campus.width, sc.campus.height, { x0: 262, y0: 150, x1: 852, y1: 668 }, 0.7, 4);
     else {
       const s = interiorOf(sc, key);
-      c = new Camera(s.width, s.height, { x0: 46, y0: 24, x1: 676, y1: 444 }, 0.8, 4);
+      c = new Camera(s.width, s.height, { x0: 70, y0: 24, x1: 664, y1: 392 }, 0.7, 4);
     }
     sc.cameras.set(key, c);
   }
