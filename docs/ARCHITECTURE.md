@@ -56,6 +56,7 @@
   - Confirmed offline workers occupy stable lounge spots with an offline indicator.
   - Unobserved identities begin muted in their home lounge. Stale observations freeze the last known position; neither is presented as confirmed idle.
 - `traffic.ts` draws handoff dots from `task.handoff` events, using shape as well as colour.
+- `operations.ts` derives small entry lamps from agent display states, job folio marks from recorded task criteria, and brief assignment pulses from timeline events. Agent handoffs require a recent completed prior attempt; only demo simulates delegation through declared supervisors. Missing agent endpoints retain the department-level traffic route. Job folios belong to workstation anchors and open the existing task panel through canvas hit testing or keyboard controls.
 - **Reduced motion** (from the OS or the in-app setting) stops ambient animation, travelling dots and camera easing.
 
 ## City integrity

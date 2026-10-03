@@ -11,9 +11,9 @@ const MIME: Record<string, string> = {
 export function builtAssets(dist: string) {
   const files = new Map<string, { body: Buffer; mime: string }>();
   let total = 0;
-  function add(path: string, url: string) {
+  function add(path: string, url: string, contentType?:string) {
     const stat = lstatSync(path);
-    const mime = MIME[extname(path)];
+    const mime = contentType??MIME[extname(path)];
     if (!stat.isFile() || !mime || stat.size > 16 * 1024 * 1024) throw Error('Invalid built asset');
     const body = readFileSync(path);
     total += body.length;
@@ -22,6 +22,10 @@ export function builtAssets(dist: string) {
   }
   add(join(dist, 'index.html'), '/');
   files.set('/index.html', files.get('/')!);
+  // The reviewed public guide is the sole text-file download. Never walk
+  // arbitrary text/configuration files or accept symlinks into the manifest.
+  try { add(join(dist,'mac-mini-diagnostics.txt'),'/mac-mini-diagnostics.txt','text/plain; charset=utf-8'); }
+  catch(e) { if((e as NodeJS.ErrnoException).code!=='ENOENT')throw e; }
   function walk(path: string, url: string, depth: number) {
     if (depth > 8 || !lstatSync(path).isDirectory()) return;
     for (const item of readdirSync(path, { withFileTypes: true })) {

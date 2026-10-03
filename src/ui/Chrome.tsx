@@ -96,6 +96,7 @@ export function TopBar() {
       </nav>
       <nav className="nav" aria-label="Views">
         <BusinessesMenu />
+        <button className={`nav__btn ${tab === 'connections' ? 'is-on' : ''}`} onClick={()=>ui.setPrefs({tab:'connections'})}>Connections</button>
         <button className={`nav__btn ${tab === 'tasks' ? 'is-on' : ''}`} onClick={() => ui.setPrefs({ tab: 'tasks' })}>
           <Icon name="list" /> Tasks
         </button>

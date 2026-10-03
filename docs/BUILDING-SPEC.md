@@ -59,6 +59,14 @@ Record the stable city ID, corresponding Control business/role ID, display name,
 
 An addition is complete only when exterior, interior, movement, interaction and data meaning agree. Do not claim live connectivity or defect-free rendering beyond what was actually verified.
 
+## Operational visual vocabulary
+
+- Every permanent lounge location needs physical seating and a reachable front approach. Preserve full sprite clearance even with the whole roster resting. Hover names belong to the agent, not furniture.
+- Equipment communicates department responsibility: HQ strategy model, finance ledger/safe, efficiency process bench, audit evidence archive and operations dispatch rack. Company product, merchandising and research props are illustrative architecture, never telemetry.
+- Desk job folios use the current worker assignment. A failed agent may retain its recorded failed job attempt while the task is unassigned; reassignment removes that folio. Progress comes from recorded acceptance criteria; absent criteria show no progress bar. Review, failure and readiness have different marks. Pointer and keyboard selection open the same task panel. Suppress folios when observations are stale.
+- Entry lamps count workers once: work, rest/offline, waiting and issue. Unknown workers do not illuminate lamps. Building hover explains the counts; keep idle identity labels compact.
+- Delegation pulses last 1.8 seconds and are limited to three concurrent events. Recorded prior attempts can supply handoff endpoints; only demo may simulate an assigning supervisor from the declared reporting line. No pulses on disconnected/stale data or under reduced motion. Existing department routes remain the fallback when agent-level endpoints are absent.
+
 ## Current building records
 
 All footprints use world coordinates, ground elevation 0, and declared Control identities. Observed execution remains demo data or disconnected live data. Label/focus/hull coordinates are derived in src/scene/campus.ts; department and ownership registries live in src/core/config.ts and src/adapters/control.ts.

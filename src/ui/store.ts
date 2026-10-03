@@ -5,6 +5,7 @@ import { DemoAdapter } from '../adapters/demo/demoAdapter';
 import { configuredBridgeUrl, LiveBridgeAdapter } from '../adapters/live';
 import type { ScenarioId } from '../adapters/demo/sim';
 import { ROSTER } from '../core/config';
+import { diagnostics } from '../core/connections';
 import { type Action, initialState, reduce } from '../core/reducer';
 import type { RedirectRequest, TrafficDot, Worker, WorkshopState } from '../core/types';
 
@@ -20,7 +21,7 @@ export interface Prefs {
   motion: 'system' | 'full' | 'reduced';
   taskFlow: boolean;
   minimap: boolean;
-  tab: 'activity' | 'tasks' | 'capacity';
+  tab: 'activity' | 'tasks' | 'capacity' | 'connections';
 }
 
 const DEFAULT_PREFS: Prefs = { source: 'live', scenario: 'steady', speed: 1, motion: 'system', taskFlow: true, minimap: true, tab: 'activity' };
@@ -186,6 +187,7 @@ class WorkshopStore extends Store<WorkshopState> implements AdapterSink {
   start(source: 'demo' | 'live', prefs: Prefs) {
     this.adapter?.stop();
     this.sourceGeneration++;
+    diagnostics.reset();
     this.pending = []; // nothing from the previous adapter may leak into the new one
     this.flushScheduled = false;
     this.roster = source === 'demo' ? loadRoster() : [];
@@ -197,7 +199,8 @@ class WorkshopStore extends Store<WorkshopState> implements AdapterSink {
       demo.subscribe((d) => ui.update({ demo: d }));
       this.adapter = demo;
     } else {
-      this.adapter = new LiveAdapter();
+      const bridge=configuredBridgeUrl();
+      this.adapter = bridge ? new LiveBridgeAdapter(bridge) : new LiveAdapter();
     }
     const generation = this.sourceGeneration;
     const guarded: AdapterSink = {

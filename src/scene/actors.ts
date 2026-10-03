@@ -5,6 +5,7 @@ import type { Pt } from './campus';
 import type { InteriorScene, Room } from './interior';
 import { type Ctx, glow, left, px } from './pixel';
 import { CHAR_H, CHAR_W, characterSprite, type IconKind, iconSprite, type Pose, type Tint } from './sprites';
+import { jobVisual } from './operations';
 
 /**
  * Visual-only worker positions. Where a worker is drawn and how it animates is
@@ -84,7 +85,7 @@ export class ActorSystem {
       const prior = this.actors.get(w.id);
       if (d.state === 'unknown' && prior) {
         // Missing telemetry freezes the last observed location, never implies rest.
-        plans.push({ w, target: [...prior.pos] as Pt, key: prior.targetKey, pose: prior.seat ? 'sit' : 'stand', flip: prior.flip, seat: prior.seat, d });
+        plans.push({ w, target: [...prior.pos] as Pt, key: prior.targetKey, pose: prior.seat ? 'sit' : prior.pose === 'lounge' ? 'lounge' : 'stand', flip: prior.flip, seat: prior.seat, d });
         continue;
       }
       const atDesk = !['idle', 'offline', 'unknown'].includes(d.state) || (d.stale && d.reported !== null && !['idle','offline','unknown'].includes(d.reported));
@@ -264,6 +265,40 @@ export class ActorSystem {
 
   positions() {
     return [...this.actors.values()].map(a => ({id:a.id, at:[...a.pos] as Pt, target:a.targetKey, state:a.state, moving:a.path.length > 0, pose:a.pose, animated:a.animated}));
+  }
+
+  /** Frozen workstation anchors keep work on its desk while the agent walks. */
+  jobObjects(state: WorkshopState) {
+    return [...this.actors.values()].flatMap(a => {
+      if (!a.seat || a.state === 'unknown' || a.state === 'idle' || a.state === 'offline') return [];
+      const worker = state.workers[a.id];
+      if (!worker || displayStatus(state,worker).stale) return [];
+      const taskId = state.statuses[a.id]?.taskId;
+      const task = taskId ? state.tasks[taskId] : undefined;
+      if (!task || task.businessId !== this.scene.businessId) return [];
+      const attemptId = state.statuses[a.id]?.attemptId;
+      const attempt = attemptId ? state.attempts[attemptId] : undefined;
+      // Failed jobs release their assignment, but the failed agent can retain
+      // its recorded attempt as an inspectable issue until reassignment.
+      const retainedFailure = a.state === 'failed' && task.status === 'failed' && !task.assignedWorkerId && attempt?.taskId === task.id && attempt.workerId === a.id;
+      if (task.assignedWorkerId !== a.id && !retainedFailure) return [];
+      return [{ task, at:this.scene.toScreen(a.seat.room.seats[a.seat.index]!.jobAt,11) }];
+    });
+  }
+
+  drawJobs(ctx:Ctx,state:WorkshopState,selected:string|null) {
+    for(const {task,at:[x,y]} of this.jobObjects(state)) {
+      const v=jobVisual(task);
+      px(ctx,x-4,y-8,'#283644',9,10);
+      px(ctx,x-3,y-7,'#ddd8c5',7,8);
+      px(ctx,x-3,y-7,v.color,7,2);
+      for(let k=0;k<2;k++) px(ctx,x-2,y-3+k*2,'#7d8b8c',4-k,1);
+      if(v.progress!==null) px(ctx,x-3,y+1,v.color,Math.round(7*v.progress),1);
+      if(v.mark==='!') { px(ctx,x+1,y-4,'#953f44',1,3); px(ctx,x+1,y,'#953f44',1,1); }
+      else if(v.mark==='?') px(ctx,x+1,y-4,'#977139',2,2);
+      else if(v.mark==='✓') px(ctx,x+1,y-4,'#507d5d',2,3);
+      if(task.id===selected) { ctx.strokeStyle='#b4e2de';ctx.lineWidth=1;ctx.strokeRect(x-5,y-9,11,12); }
+    }
   }
 
   screenOf(id: string): Pt | null {

@@ -2,6 +2,7 @@ import type { AdapterSink, WorkshopAdapter } from '../adapter';
 import { mapObservation, projectSnapshot, validateObservation, type Observation } from './projection';
 import { normalizeSnapshot } from '../../core/normalize';
 import { currentWorkEvents, withCurrentWork } from './currentWork';
+import { diagnostics as streamDiagnostics } from '../../core/connections';
 
 export interface Stream {
   addEventListener(type: string, listener: (event: { data: string }) => void): void;
@@ -34,6 +35,7 @@ export class LiveAdapter implements WorkshopAdapter {
   }
   start(sink: AdapterSink) {
     this.stop(); this.sink = sink;
+    streamDiagnostics.reset(); streamDiagnostics.update({endpoint:'/api/events'});
     this.diagnostics.rejected = 0; this.diagnostics.contractMismatch = false; this.diagnostics.message = '';
     sink.connection('disconnected');
     this.connect();
@@ -70,13 +72,18 @@ export class LiveAdapter implements WorkshopAdapter {
           this.sink!.reset(); // authoritative replacement, including empty/restarted sources
           this.sink!.snapshot(snapshot, 'connected');
           this.sink!.connection('connected');
+          streamDiagnostics.update({acceptedSnapshots:streamDiagnostics.get().acceptedSnapshots+1,feeds:{}});
+          this.workDiagnostics(this.currentWork);
         } else {
           if (this.epoch === null) { this.reject('Snapshot required before incremental events'); return; }
           if (m.epoch !== this.epoch) throw Error('Server restarted without snapshot');
           if (kind === 'current-work') {
             if(m.cursor!==this.cursor)throw Error('Native stream cursor diverged');
             this.currentWork=m.currentWork;
-            this.sink!.events(currentWorkEvents(this.currentWork));
+            const events=currentWorkEvents(this.currentWork);
+            this.sink!.events(events);
+            streamDiagnostics.update({acceptedEvents:streamDiagnostics.get().acceptedEvents+events.length});
+            this.workDiagnostics(this.currentWork);
           } else if (kind === 'heartbeat') {
             if (m.cursor !== this.cursor) throw Error('Heartbeat cursor diverged');
           } else {
@@ -96,18 +103,35 @@ export class LiveAdapter implements WorkshopAdapter {
             this.records = combined; this.cursor = m.cursor;
             if (newRoles) this.sink!.snapshot(snapshot, 'connected');
             else this.sink!.events(events);
+            streamDiagnostics.update({acceptedEvents:streamDiagnostics.get().acceptedEvents+records.length});
           }
         }
         this.lastMessage = this.now(); this.diagnostics.message = '';
+        streamDiagnostics.update({lastMessageAt:this.lastMessage,lastValidAt:this.lastMessage,lastError:null});
       } catch (e) { this.reject(e instanceof Error ? e.message : 'Invalid message'); this.recover(this.diagnostics.message); }
     };
     for (const kind of ['snapshot','events','heartbeat','current-work']) stream.addEventListener(kind, handler(kind));
     stream.onerror = () => { if (current()) this.recover('Local stream disconnected'); };
   }
-  private reject(message: string) { this.diagnostics.rejected++; this.diagnostics.message = message; }
+  private workDiagnostics(value:unknown) {
+    // Called only after the native mapper/normalizer accepts the source. No
+    // provider, machine, business, or budget health is inferred from a heartbeat.
+    const v=value as {state?:string;observedAt?:number;task?:{lastUpdate:number};steps?:unknown[]}|null;
+    const feeds={...streamDiagnostics.get().feeds};
+    if(v?.state==='connected'&&Number.isSafeInteger(v.observedAt)&&v.task&&v.task.lastUpdate<=v.observedAt!&&v.observedAt!<=this.now()+30000){
+      const base={status:'ok' as const,checkedAt:v.observedAt!,lastRecordAt:v.task.lastUpdate};
+      feeds.runtime={...base,id:'runtime',records:1,detail:'Successfully read and mapped the explicitly bound default Hermes SessionDB session'};
+      feeds.tools={...base,id:'tools',records:Array.isArray(v.steps)?v.steps.length:0,detail:'Sanitized native tool-step metadata; steps are not workers or acceptance'};
+    }else{
+      for(const id of ['runtime','tools'] as const)feeds[id]={id,status:'not_configured',checkedAt:this.now(),lastRecordAt:null,records:0,detail:'No successful explicitly bound native source check in this frame'};
+    }
+    streamDiagnostics.update({feeds});
+  }
+  private reject(message: string) { this.diagnostics.rejected++; this.diagnostics.message = message; streamDiagnostics.update({rejectedMessages:streamDiagnostics.get().rejectedMessages+1,lastError:message}); }
   private recover(message: string) {
     if (!this.sink) return;
     this.diagnostics.message = message;
+    streamDiagnostics.update({lastError:message});
     this.stream?.close(); this.stream = null; this.streamGeneration++;
     this.sink.connection(this.records.length || this.epoch !== null ? 'reconnecting' : 'disconnected');
     if (this.retry !== null) return;

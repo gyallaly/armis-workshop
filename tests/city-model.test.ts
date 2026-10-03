@@ -59,6 +59,7 @@ describe('all declared agents have physical homes', () => {
     expect(new Set(positions.map(p => p.at.join(','))).size).toBe(people.length);
     // Full sprite bounds must fit even when the entire company is resting.
     const spots = scene.lounge.map(s => scene.toScreen(s.at));
+    expect(scene.lounge.every(s=>s.pose==='lounge')).toBe(true);
     for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) {
       const a = spots[i]!, b = spots[j]!;
       expect(Math.abs(a[0] - b[0]) >= 14 * 1.6 || Math.abs(a[1] - b[1]) >= 24 * 1.6, `lounge spots ${i} and ${j} overlap`).toBe(true);
@@ -91,6 +92,23 @@ describe('all declared agents have physical homes', () => {
     expect(stale.at).toEqual(active.at); expect(stale.state).toBe('unknown'); expect(stale.moving).toBe(false);
     s = applyEvent({...s,now:1000},{...event('rest','idle'),sourceTs:2000}); actors.update(s,3000,false);
     expect(actors.positions().find(p => p.id === 'uditus.creator')!.target).toMatch(/^lounge:/);
+  });
+  it('retains a failed job folio against its recorded attempt, until reassigned or stale',()=> {
+    const sim=new DemoSim(7,'steady');
+    sim.advanceTo(sim.loadAt+2000);
+    let state=sim.truth;
+    const task=Object.values(state.tasks).find(t=>t.businessId==='uditus' && t.assignedWorkerId)!;
+    const workerId=task.assignedWorkerId!;
+    const scene=buildInterior(BUSINESSES.find(b=>b.id==='uditus')!,{});
+    const actors=new ActorSystem(scene);
+    const sourceTs=state.now+1;
+    state=applyEvent(state,{id:'folio-failed-task',type:'task.status',businessId:'uditus',taskId:task.id,sourceTs,receivedTs:sourceTs,payload:{status:'failed'}});
+    state=applyEvent(state,{id:'folio-failed-worker',type:'worker.state',businessId:'uditus',workerId,taskId:task.id,sourceTs,receivedTs:sourceTs,payload:{state:'failed'}});
+    actors.update(state,sourceTs,false);
+    expect(actors.jobObjects(state).find(j=>j.task.id===task.id)?.task.status).toBe('failed');
+    expect(actors.jobObjects({...state,connection:'disconnected'})).toEqual([]);
+    state={...state,tasks:{...state.tasks,[task.id]:{...state.tasks[task.id]!,assignedWorkerId:'uditus.fixer'}}};
+    expect(actors.jobObjects(state).some(j=>j.task.id===task.id)).toBe(false);
   });
   it('projects validated telemetry through the reducer into occupancy and session counts', () => {
     const sim = new DemoSim(7,'steady');

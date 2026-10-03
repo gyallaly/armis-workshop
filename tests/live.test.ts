@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { decodeBridgeMessage, LiveBridgeAdapter } from '../src/adapters/live';
 import { DemoSim } from '../src/adapters/demo/sim';
 import type { AdapterSink } from '../src/adapters/adapter';
+import { diagnostics, feedWorking } from '../src/core/connections';
 
 function snapshot() {
   const sim = new DemoSim(7,'steady');
@@ -42,9 +43,15 @@ describe('read-only telemetry boundary', () => {
     const events = {type:'events',events:[{id:'rest',type:'worker.state',businessId:'uditus',workerId:'uditus.creator',sourceTs:s.takenAt,payload:{state:'idle',departmentId:'uditus:lounge'}}]};
     Stream.current.send(events); expect(sink.events).not.toHaveBeenCalled();
     Stream.current.send({type:'snapshot',snapshot:s}); expect(sink.snapshot).toHaveBeenCalledOnce();
+    Stream.current.send({type:'health',feeds:[{id:'workers',status:'ok',checkedAt:s.takenAt,lastRecordAt:null,records:0,detail:'Runtime source checked'}]});
+    expect(feedWorking(diagnostics.get().feeds.workers,true,s.takenAt)).toBe(true);
     Stream.current.send(events); expect(sink.events).toHaveBeenCalledOnce();
     Stream.current.onerror?.(); Stream.current.send(events); expect(sink.events).toHaveBeenCalledOnce();
     Stream.current.send({type:'snapshot',snapshot:s}); Stream.current.send(events); expect(sink.events).toHaveBeenCalledTimes(2);
+    expect(diagnostics.get().feeds).toEqual({});
+    expect(diagnostics.get().acceptedSnapshots).toBe(2);
+    expect(diagnostics.get().acceptedEvents).toBe(2);
+    expect(diagnostics.get().rejectedMessages).toBe(2);
     expect(adapter.requestRedirect().accepted).toBe(false);
     adapter.stop(); expect(Stream.current.close).toHaveBeenCalledOnce(); expect(vi.getTimerCount()).toBe(0);
   });

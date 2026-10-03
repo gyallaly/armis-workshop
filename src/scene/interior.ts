@@ -24,6 +24,8 @@ export interface Room {
 
 export interface Seat {
   at: Pt;
+  /** Job folio on the desk surface, separate from the worker hit area. */
+  jobAt: Pt;
   /** Monitor screen rects on plane wy = y: [x, y, width]. */
   monitors: [number, number, number][];
 }
@@ -371,7 +373,7 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
     exit,
     walk(from, to) {
       const allowed = ([x,y]: Pt) => (x >= -8 && x <= 370 && y >= CORR_Y0+4 && y <= CORR_Y1-4) || rooms.some((r) => x >= r.x0+4 && x <= r.x1-4 && y >= r.y0+4 && y <= r.y1-4) || rooms.some((r) => Math.abs(x-r.door[0]) <= 8 && Math.abs(y-r.door[1]) <= 10);
-      const seatApproach = (p: Pt): Pt => lounge.some((s) => s.pose === 'lounge' && s.at[0] === p[0] && s.at[1] === p[1]) ? [p[0], p[1]+12] : p;
+      const seatApproach = (p: Pt): Pt => lounge.some((s) => s.pose === 'lounge' && s.at[0] === p[0] && s.at[1] === p[1]) ? [p[0], Math.min(p[1]+12, 231)] : p;
       const start = seatApproach(from); const end = seatApproach(to);
       const path = navigate(start, end, solids.filter((r) => r.blocking).map((r) => ({x0:r.x0-2,y0:r.y0-2,x1:r.x1+2,y1:r.y1+2})), allowed, rooms.flatMap((r): Pt[] => [r.door, [r.door[0], cy], [r.door[0], r.door[1]+(r.row === 0 ? -12 : 12)]]));
       if (!path.length) return [];
@@ -453,7 +455,7 @@ function deskAt(ctx: Ctx, iso: Iso, x: number, y: number, monitors: number, ligh
   const cyy = y + 17;
   px(ctx, iso.x(cx, cyy) - 3, iso.y(cx, cyy) - 2, '#1d1f28', 7, 2);
   px(ctx, iso.x(cx, cyy) - 1, iso.y(cx, cyy) - 5, '#2a2d38', 2, 3);
-  return { at: [cx, cyy], monitors: mons };
+  return { at: [cx, cyy], jobAt: [x + 16, y + 7], monitors: mons };
 }
 
 function plant(ctx: Ctx, iso: Iso, x: number, y: number, seed: number, big = false) {
@@ -561,12 +563,26 @@ function furnish(
     // spots
     lounge.push({ at: [rx0 + 18, ry0 - 4], pose: 'lounge', flip: false });
     lounge.push({ at: [rx0 + 42, ry0 - 4], pose: 'lounge', flip: false });
-    lounge.push({ at: [x0 + 115, y0 + 24], pose: 'stand', flip: true });
+    lounge.push({ at: [x0 + 115, y0 + 24], pose: 'lounge', flip: false });
     lounge.push({ at: [rx0 - 9, ry0 + 22], pose: 'lounge', flip: false });
-    lounge.push({ at: [x0 + 18, y0 + 20], pose: 'coffee', flip: true });
-    lounge.push({ at: [x0 + 16, y0 + 80], pose: 'stand', flip: true });
-    lounge.push({ at: [x0 + 125, y0 + 70], pose: 'stand', flip: true });
-    lounge.push({ at: [x0 + 75, y0 + 90], pose: 'stand', flip: false });
+    lounge.push({ at: [x0 + 18, y0 + 20], pose: 'lounge', flip: false });
+    lounge.push({ at: [x0 + 16, y0 + 80], pose: 'lounge', flip: false });
+    lounge.push({ at: [x0 + 125, y0 + 70], pose: 'lounge', flip: false });
+    lounge.push({ at: [x0 + 75, y0 + 90], pose: 'lounge', flip: false });
+    // Each permanent rest location has an actual chair, including the reading
+    // corner and coffee nook. Their front approaches remain clear.
+    for (const [x, y] of [[x0+115,y0+24],[x0+18,y0+20],[x0+16,y0+80],[x0+125,y0+70],[x0+75,y0+90]] as Pt[]) {
+      const cloth = b.kind === 'hq' ? '#56647c' : b.id === 'etsy-studio' ? '#9c6856' : b.id === 'aster-ledger' ? '#426665' : '#68628a';
+      const chair = {top:cloth,left:shade(cloth,0.8),right:shade(cloth,0.65)};
+      box(ctx,iso,x-7,y-9,x+7,y-4,0,6,chair);
+      box(ctx,iso,x-7,y-12,x+7,y-9,0,13,chair);
+      box(ctx,iso,x-9,y-10,x-7,y-3,0,9,chair);
+      box(ctx,iso,x+7,y-10,x+9,y-3,0,9,chair);
+    }
+    // Open book in the reading corner and cups beside the coffee station.
+    top(ctx,iso,x1-43,y0+5,x1-34,y0+11,0,'#ddd4b7');
+    top(ctx,iso,x1-39,y0+5,x1-38,y0+11,0,'#a59071');
+    top(ctx,iso,x0+2,y0+27,x0+8,y0+33,12,'#d9d2ba');
     if (x1 - x0 > 200) {
       // HQ lounge is wide: second sofa group
       const r2 = x0 + 200;
@@ -665,7 +681,7 @@ function furnish(
   }
 
   if (['leadership','finance','efficiency','quality','operations','delivery'].includes(kind)) {
-    const title = ({leadership:'CEO',finance:'CFO',efficiency:'EFFICIENCY',quality:'QUALITY',operations:'OPERATIONS',delivery:'DELIVERY'} as Record<string,string>)[kind]!;
+    const title = kind === 'quality' && b.kind === 'hq' ? 'AUDIT' : kind === 'delivery' ? (b.id === 'uditus' ? 'PRODUCT STUDIO' : b.id === 'etsy-studio' ? 'MERCHANDISING' : 'RESEARCH FLOOR') : ({leadership:'CEO',finance:'CFO',efficiency:'EFFICIENCY',quality:'QUALITY',operations:'OPERATIONS'} as Record<string,string>)[kind]!;
     const z = room.row === 0 ? 54 : LOW_H - 2;
     wallSign(ctx, iso, room, title, b.brand.colors.accent, lights, z);
     if (room.row === 0) {
@@ -690,6 +706,7 @@ function furnish(
     const monitors = kind === 'audit' ? 3 : 2;
     room.seats.push(deskAt(ctx, iso, startX + i * step, deskY, monitors, lights, command));
   }
+  identityEquipment(ctx, iso, room, b);
   // filing cabinet, plants and lamps
   if (kind !== 'audit') box(ctx, iso, x1 - 22, y0 + 3, x1 - 12, y0 + 10, 0, 16, { top: '#5a5d6e', left: '#454857', right: '#3a3d4a', rim: '#7a7e92' });
   plant(ctx, iso, x1 - 8, y1 - 12, x0 + 3, true);
@@ -698,6 +715,114 @@ function furnish(
   void b;
   void rnd;
   void wallH;
+}
+
+/** Equipment is illustrative architecture; screens carry no invented metrics. */
+function identityEquipment(ctx: Ctx, iso: Iso, r: Room, b: Business) {
+  const {x0,x1,y0,y1,kind} = r;
+  const plinth = (x: number,y: number,w: number,c: string) => box(ctx,iso,x,y,x+w,y+10,0,10,{top:c,left:shade(c,0.72),right:shade(c,0.6),rim:shade(c,1.2)});
+  const sheet = (x:number,y:number,c:string) => {
+    top(ctx,iso,x,y,x+8,y+6,10,'#d8d8ca');
+    top(ctx,iso,x+1,y+2,x+7,y+3,10,c);
+    top(ctx,iso,x+1,y+4,x+5,y+5,10,c);
+  };
+  if (b.kind === 'hq') {
+    const x = x0+10, y = y1-29;
+    // Each command wall has its own symbolic diagram below the sign band.
+    if(r.row===0) {
+      left(ctx,iso,y0,x0+13,x1-13,13,32,'#132637');
+      if(kind==='leadership') {
+        const mid=(x0+x1)/2;
+        left(ctx,iso,y0,mid-4,mid+4,26,30,'#c2ad76');
+        left(ctx,iso,y0,mid,mid+1,20,26,'#7c959d');
+        left(ctx,iso,y0,x0+28,x1-28,20,21,'#7c959d');
+        for(const u of [x0+28,mid,x1-28]) {
+          left(ctx,iso,y0,u,u+1,17,21,'#7c959d');
+          left(ctx,iso,y0,u-4,u+4,15,18,'#91afba');
+        }
+      } else if(kind==='finance') {
+        for(let k=0;k<3;k++) {
+          const u=x0+19+k*24;
+          left(ctx,iso,y0,u,u+16,27,29,'#b4ab82');
+          for(let z=16;z<26;z+=4) left(ctx,iso,y0,u,u+12-(z%3),z,z+1,'#779e91');
+        }
+      } else if(kind==='efficiency') {
+        for(let k=0;k<4;k++) {
+          const u=x0+19+k*22;
+          left(ctx,iso,y0,u,u+12,20,27,k===3?'#b4b28b':'#7dada8');
+          if(k<3) left(ctx,iso,y0,u+12,u+22,23,24,'#7b9199');
+        }
+      }
+    }
+    if (kind === 'leadership') {
+      // Brass-edged strategy table with a miniature island organization model.
+      plinth(x,y,30,'#58667a');
+      top(ctx,iso,x+2,y+2,x+28,y+8,10,'#304b57');
+      for (const [dx,dy,h] of [[13,2,8],[4,5,4],[22,5,4]] as [number,number,number][]) box(ctx,iso,x+dx,y+dy,x+dx+4,y+dy+3,10,10+h,{top:'#c9b486',left:'#7d8b95',right:'#526477'});
+    } else if (kind === 'finance') {
+      plinth(x,y,27,'#756549');
+      for (let k=0;k<3;k++) sheet(x+2+k*8,y+2,'#729a82');
+      box(ctx,iso,x1-36,y0+70,x1-24,y0+82,0,22,{top:'#5b6773',left:'#384858',right:'#2a3745'});
+      left(ctx,iso,y0+82,x1-34,x1-26,8,18,'#6f8390');
+      left(ctx,iso,y0+82,x1-31,x1-29,11,13,'#c2ad76');
+    } else if (kind === 'efficiency') {
+      plinth(x,y,32,'#42656a');
+      for (let k=0;k<4;k++) {
+        top(ctx,iso,x+3+k*7,y+2,x+7+k*7,y+7,10,k===3?'#b9bc8c':'#86aaa4');
+        if(k<3) top(ctx,iso,x+7+k*7,y+4,x+10+k*7,y+5,10,'#c6c8b2');
+      }
+      // Process cards and a clock on the side wall, below the sign band.
+      right(ctx,iso,x0,y0+12,y0+31,12,28,'#476275');
+      for(let k=0;k<3;k++) right(ctx,iso,x0,y0+14+k*5,y0+17+k*5,16,22,'#cfbc8a');
+    } else if (kind === 'quality') {
+      plinth(x,y,27,'#647087');
+      sheet(x+2,y+2,'#7b8977'); sheet(x+15,y+2,'#a17563');
+      // Evidence archive and magnifying lens on a grounded inspection bench.
+      box(ctx,iso,x+10,y+3,x+13,y+6,10,15,{top:'#b4d0cf',left:'#759896',right:'#4e6b73'});
+      right(ctx,iso,x0,y0+12,y0+32,4,17,'#4d5d70');
+      for(let k=0;k<4;k++) right(ctx,iso,x0,y0+14+k*4,y0+16+k*4,6,15,'#bea87b');
+    } else if (kind === 'operations') {
+      // Dispatch rack and a routing table; no decorative live status lights.
+      plinth(x,y,29,'#466075');
+      for(let k=0;k<3;k++) sheet(x+2+k*8,y+2,'#758daa');
+      box(ctx,iso,x1-34,y1-38,x1-22,y1-26,0,23,{top:'#5e7287',left:'#283d51',right:'#1b2d40'});
+      for(let z=5;z<22;z+=5) left(ctx,iso,y1-26,x1-32,x1-24,z,z+2,'#8394a5');
+    }
+    return;
+  }
+  if (kind !== 'research' && kind !== 'delivery') return;
+  const x=x0+14, y=y1-32;
+  if (b.id === 'uditus') {
+    // Product studio: prototype devices, wireframe board and component tray.
+    plinth(x,y,36,'#657784');
+    for(let k=0;k<3;k++) {
+      box(ctx,iso,x+3+k*11,y+2,x+9+k*11,y+7,10,14,{top:'#283e56',left:'#354d63',right:'#26354b'});
+      top(ctx,iso,x+4+k*11,y+3,x+8+k*11,y+6,14,'#8abdc7');
+    }
+    if(kind==='delivery') {
+      right(ctx,iso,x0,y0+8,y0+35,3,18,'#ccd4c9');
+      for(let k=0;k<4;k++) right(ctx,iso,x0,y0+10+k*6,y0+14+k*6,6,14,k%2?'#698398':'#789a8d');
+    }
+  } else if (b.id === 'etsy-studio') {
+    // Merchandising: textile swatches, product display and packing bench.
+    plinth(x,y,42,'#a27b55');
+    for(let k=0;k<5;k++) top(ctx,iso,x+3+k*7,y+2,x+9+k*7,y+8,10,['#c78573','#d7b875','#8caaa0','#9686af','#d5c5a9'][k]!);
+    if(kind==='delivery') {
+      box(ctx,iso,x1-53,y1-37,x1-39,y1-24,0,12,{top:'#c39c69',left:'#987248',right:'#775935'});
+      top(ctx,iso,x1-47,y1-37,x1-45,y1-24,12,'#e0c399');
+      right(ctx,iso,x0,y0+8,y0+36,3,18,'#805d47');
+      for(let k=0;k<4;k++) right(ctx,iso,x0,y0+11+k*6,y0+15+k*6,6,15,['#c78573','#d7b875','#8caaa0','#d5c5a9'][k]!);
+    }
+  } else if (b.id === 'aster-ledger') {
+    // Research: reference atlas, instrument console and paper comparison trays.
+    plinth(x,y,38,'#4c7471');
+    sheet(x+3,y+2,'#527d87'); sheet(x+24,y+2,'#b59b5f');
+    box(ctx,iso,x+15,y+2,x+21,y+8,10,18,{top:'#a2b9b3',left:'#567977',right:'#385b60'});
+    if(kind==='delivery') {
+      right(ctx,iso,x0,y0+8,y0+37,3,18,'#163637');
+      for(let k=0;k<4;k++) right(ctx,iso,x0,y0+11+k*6,y0+13+k*6,6,14,'#89a8a0');
+    }
+  }
 }
 
 function wallDecor(ctx: Ctx, iso: Iso, room: Room, wallH: number, lights: Lights, rnd: () => number) {

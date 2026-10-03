@@ -1,0 +1,25 @@
+import { expect, test } from '@playwright/test';
+for(const width of [1280,1440]) test(`connections show unverified Mac feeds red at ${width}px`,async({page})=> {
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.setViewportSize({width,height:900});
+  await page.goto('/');
+  await page.getByLabel('Data source',{exact:true}).selectOption('demo');
+  await page.getByRole('tab',{name:'Connections',exact:true}).click();
+  const panel=page.getByRole('region',{name:'Mac mini connections'});
+  await expect(panel.getByText('0 / 23 feeds verified')).toBeVisible();
+  await expect(panel.locator('.connection-row--ok')).toHaveCount(0);
+  await expect(panel.locator('.connection-row--bad')).toHaveCount(24);
+  await expect(panel.getByText(/Simulated activity does not verify/)).toBeVisible();
+  await page.getByLabel('Data source',{exact:true}).selectOption('live');
+  await expect(panel.getByText('http://127.0.0.1:4183/api/events',{exact:true})).toBeVisible();
+  await expect(panel.getByText('Disconnected / stale',{exact:true})).toBeVisible();
+  await expect(panel.getByText('0 / 23 feeds verified')).toBeVisible();
+  await expect(panel.locator('.connection-row--ok')).toHaveCount(0);
+  await expect(panel.getByRole('article',{name:'Measured AI usage: Not connected'})).toBeAttached();
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  const block=await page.request.get('/mac-mini-diagnostics.txt');
+  expect(block.ok()).toBe(true);
+  expect(await block.text()).toContain('sys.stdin.read().replace(chr(160)');
+  await page.screenshot({path:`screenshots/connections-${width}.png`});
+  expect(errors).toEqual([]);
+});

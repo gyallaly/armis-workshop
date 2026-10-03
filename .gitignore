@@ -1,4 +1,4 @@
-node_modules/
+/node_modules
 dist/
 test-results/
 playwright-report/
@@ -8,3 +8,4 @@ playwright-report/
 dist-snapshot/
 screenshots/
 scripts-shot.mjs
+.armis/

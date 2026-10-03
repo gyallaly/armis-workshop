@@ -12,6 +12,7 @@ import { placeLabels } from './labels';
 import { buildInterior, type InteriorScene } from './interior';
 import { DOT_STYLE, drawDots, drawGuide, type PlacedDot } from './traffic';
 import { CapacityChip } from '../ui/CapacityPanel';
+import { buildingSignals, drawBuildingSignals, drawDelegations } from './operations';
 
 function loadImage(src: string): Promise<HTMLImageElement | undefined> {
   return new Promise((resolve) => {
@@ -82,7 +83,7 @@ export function SceneView() {
   const overlayRef = useRef<HTMLDivElement>(null);
   const scenesRef = useRef<Scenes | null>(null);
   const [ready, setReady] = useState(false);
-  const [hover, setHover] = useState<{ kind: 'worker' | 'building' | 'dot' | 'room'; id: string } | null>(null);
+  const [hover, setHover] = useState<{ kind: 'worker' | 'building' | 'dot' | 'room' | 'job'; id: string } | null>(null);
   const [fading, setFading] = useState(false);
   const hoverRef = useRef(hover);
   hoverRef.current = hover;
@@ -183,6 +184,7 @@ export function SceneView() {
         const campus = sc.campus;
         ctx.drawImage(campus.base, 0, 0);
         campus.drawAmbient(ctx, now, motion, u.prefs.taskFlow);
+        for(const b of campus.buildings) drawBuildingSignals(ctx,b.door,s,b.id);
         // hover / selection outline on buildings
         for (const b of campus.buildings) {
           const on = (hv?.kind === 'building' && hv.id === b.id) || (u.selection?.kind === 'building' && u.selection.id === b.id);
@@ -212,7 +214,9 @@ export function SceneView() {
         }
         actors.update(s, t, motion);
         actors.drawMonitors(ctx, now, motion);
+        actors.drawJobs(ctx,s,u.selection?.kind === 'task' ? u.selection.id : null);
         actors.draw(ctx, s, now, selId, hv?.kind === 'worker' ? hv.id : null);
+        if(u.prefs.taskFlow) drawDelegations(ctx,s,viewKey,t,id=>actors.screenOf(id),motion);
         dots = s.traffic
           .filter((d) => d.businessId === viewKey)
           .map((d) => {
@@ -272,6 +276,7 @@ export function SceneView() {
           let p: Pt | null | undefined = null;
           if (kind === 'worker') p = sc.actors.get(viewKey)?.screenOf(id);
           else if (kind === 'dot') p = lastDotPos.current.get(id);
+          else if (kind === 'job') p = sc.actors.get(viewKey)?.jobObjects(s).find(j=>j.task.id===id)?.at;
           if (!p) {
             el.style.visibility = 'hidden';
             return;
@@ -294,13 +299,16 @@ export function SceneView() {
       const r = canvas.getBoundingClientRect();
       return [e.clientX - r.left, e.clientY - r.top];
     };
-    const hitAt = (sp: Pt): { kind: 'worker' | 'building' | 'dot' | 'room'; id: string } | null => {
+    const hitAt = (sp: Pt): { kind: 'worker' | 'building' | 'dot' | 'room' | 'job'; id: string } | null => {
       const p = cam.toWorld(sp[0], sp[1]);
       const tol = 7 / Math.max(1, cam.scale / 2);
       for (const d of placedRef.current) if (Math.hypot(d.at[0] - p[0], d.at[1] - p[1]) < Math.max(5, tol)) return { kind: 'dot', id: d.dot.id };
       if (viewKey === 'campus') {
         for (const b of sc.campus.buildings) if (pointInPoly(p, b.hull)) return { kind: 'building', id: b.id };
         return null;
+      }
+      for(const j of sc.actors.get(viewKey)?.jobObjects(store.get()) ?? []) {
+        if(p[0]>=j.at[0]-5 && p[0]<=j.at[0]+5 && p[1]>=j.at[1]-9 && p[1]<=j.at[1]+3) return {kind:'job',id:j.task.id};
       }
       const w = sc.actors.get(viewKey)?.hit(p);
       if (w) return { kind: 'worker', id: w };
@@ -347,7 +355,8 @@ export function SceneView() {
       if (h.kind === 'dot') {
         const d = placedRef.current.find((x) => x.dot.id === h.id);
         if (d) ui.select({ kind: 'dot', dot: d.dot });
-      } else if (h.kind === 'worker') ui.select({ kind: 'worker', id: h.id });
+      } else if (h.kind === 'job') ui.select({kind:'task',id:h.id});
+      else if (h.kind === 'worker') ui.select({ kind: 'worker', id: h.id });
       else if (h.kind === 'building') enterBuilding(h.id);
       else if (h.kind === 'room') {
         const r = interiorOf(sc, viewKey).rooms.find((x) => x.departmentId === h.id);
@@ -461,6 +470,8 @@ export function SceneView() {
   const hoveredWorker = hover?.kind === 'worker' ? state.workers[hover.id] : undefined;
   const hoveredDot = hover?.kind === 'dot' ? state.traffic.find((d) => d.id === hover.id) : undefined;
   const selectedDot = selection?.kind === 'dot' ? selection.dot : null;
+  const jobs = viewKey === 'campus' ? [] : sc?.actors.get(viewKey)?.jobObjects(state) ?? [];
+  const hoveredJob = hover?.kind === 'job' ? state.tasks[hover.id] : undefined;
 
   return (
     <div
@@ -489,6 +500,8 @@ export function SceneView() {
         {ready && sc && view.mode === 'interior'
           ? interiorOf(sc, viewKey).rooms.map((r) => <RoomLabel key={r.departmentId} departmentId={r.departmentId} anchor={r.label} />)
           : null}
+        {jobs.map(j=><div className="anchor" key={j.task.id} data-track={`job|${j.task.id}`}><button className="scene-job" aria-label={`Open job: ${j.task.title}`} onClick={()=>ui.select({kind:'task',id:j.task.id})} onFocus={()=>setHover({kind:'job',id:j.task.id})} onBlur={()=>setHover(null)} /></div>)}
+        {hoveredJob ? <div className="anchor" data-track={`job|${hoveredJob.id}`}><div className="tip tip--worker"><strong>{hoveredJob.title}</strong><span>{hoveredJob.status.replaceAll('_',' ')} · Click to open job</span></div></div> : null}
         {hoveredWorker && (!selection || selection.kind !== 'worker' || selection.id !== hoveredWorker.id) ? (
           <div className="anchor" data-track={`worker|${hoveredWorker.id}`}>
             <div className="tip tip--worker">
@@ -537,6 +550,7 @@ function BuildingLabel({ id, anchor, hovered, onEnter, onHover, extra }: { id: s
   const c = useMemo(() => businessCounts(state, id), [state, id]);
   const live = state.connection === 'demo' || (state.connection === 'connected' && (c.roster > 0 || Object.values(state.tasks).some(t => t.businessId === id)));
   const lock = b.brand.assets.lockupOnDark;
+  const signals = buildingSignals(state,id);
   return (
     <div className="anchor" data-ax={anchor[0]} data-ay={anchor[1]}>
       <div className="blabel-wrap">
@@ -549,6 +563,7 @@ function BuildingLabel({ id, anchor, hovered, onEnter, onHover, extra }: { id: s
         onFocus={() => onHover(true)}
         onBlur={() => onHover(false)}
         aria-label={`Enter ${b.brand.displayName}. ${live ? `${c.active} active, ${c.queued + c.waitingProvider} queued, ${c.held} held, ${c.failed} failed, roster ${c.roster}` : 'status unknown'}`}
+        title={`Entry lights: ${signals.counts[0]} working, ${signals.counts[1]} resting/offline, ${signals.counts[2]} waiting, ${signals.counts[3]} issues. ${signals.unknown} unobserved.`}
       >
         <span className="blabel__title">
           <span className={`dot ${c.active ? 'dot--on' : ''}`} aria-hidden="true" />
@@ -559,12 +574,11 @@ function BuildingLabel({ id, anchor, hovered, onEnter, onHover, extra }: { id: s
         <span className="blabel__counts">
           {live ? (
             <>
-              <span>{c.active} active</span>
-              <span>{c.idle} resting</span>
-              <span>{c.queued + c.waitingProvider} queued</span>
-              {c.held ? <span className="warn">{c.held} held</span> : null}
-              {c.failed ? <span className="bad">{c.failed} failed</span> : null}
-              {c.unknown ? <span className="muted">{c.unknown} unknown</span> : null}
+              <span>{signals.counts[0]} working</span>
+              <span>{signals.counts[1]} resting/offline</span>
+              <span className="warn">{signals.counts[2]} waiting</span>
+              <span className={signals.counts[3] ? 'bad' : 'muted'}>{signals.counts[3]} issues</span>
+              {signals.unknown ? <span className="muted">{signals.unknown} unknown</span> : null}
               <span className="muted">{c.roster} agents</span>
             </>
           ) : (

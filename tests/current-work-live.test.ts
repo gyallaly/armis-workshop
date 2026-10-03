@@ -1,4 +1,5 @@
 import {test,expect} from 'vitest';
+import {diagnostics} from '../src/core/connections';
 import {LiveAdapter} from '../src/adapters/live/liveAdapter';
 import {initialState,reduce} from '../src/core/reducer';
 import {displayStatus} from '../src/core/selectors';
@@ -15,6 +16,12 @@ test('native work reaches the existing Managing Director character without inven
  expect(displayStatus(state,state.workers['armis.ceo']!).state).toBe('active');
  expect(state.statuses['armis.ceo']?.taskId).toBe(work.task.id);
  expect(state.tasks[work.task.id]?.assignedWorkerId).toBe('armis.ceo');
+ expect(Object.values(state.attempts)).toHaveLength(0);
+ expect(diagnostics.get()).toMatchObject({acceptedSnapshots:1,lastMessageAt:2500,lastValidAt:2500,endpoint:'/api/events'});
+ expect(diagnostics.get().feeds.runtime).toMatchObject({status:'ok',records:1});
+ expect(diagnostics.get().feeds.capacity).toBeUndefined(); // stream liveness is not provider capacity
+ listeners.heartbeat!({data:JSON.stringify({version:1,epoch:'epoch',cursor:0})});
+ expect(diagnostics.get().acceptedSnapshots).toBe(1);
  expect(Object.values(state.attempts)).toHaveLength(0);
  listeners['current-work']!({data:JSON.stringify({version:1,epoch:'epoch',cursor:0,currentWork:{...work,observedAt:2600,task:{...work.task,state:'waiting',lastUpdate:2600}}})});
  expect(state.statuses['armis.ceo']?.state).toBe('waiting_approval');

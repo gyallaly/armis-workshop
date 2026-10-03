@@ -1,0 +1,13 @@
+.connections h2 { font-size: 20px; margin: 0 0 12px; }
+.connections p { color: var(--ink-2); line-height: 1.6; }
+.connection-row { padding: 14px 0; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.connection-row__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; }
+.connection-row--ok strong, .connection-row--ok .connection-row__head > span { color: #8acda7; }
+.connection-row--bad strong, .connection-row--bad .connection-row__head > span { color: #e89999; }
+.connection-row small { color: var(--ink-2); line-height: 1.5; overflow-wrap: anywhere; }
+.connection-row dl { display: grid; grid-template-columns: 1fr auto; margin: 8px 0; gap: 6px; font-size: 12px; }
+.connection-row dd { margin: 0; font-family: var(--mono); }
+.connections__notice { padding: 10px; border: 1px solid var(--line-strong); }
+.connections a { display: inline-block; margin: 16px 0; color: var(--accent); }
+.panel > .tabs { flex-wrap: wrap; }
+.panel > .tabs .tab { font-size: 11px; padding-inline: 8px; }
