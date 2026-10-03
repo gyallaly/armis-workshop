@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { configuredBridgeUrl } from '../adapters/live';
-import { diagnostics, FEEDS, feedWorking } from '../core/connections';
+import { diagnostics, FEEDS, FEED_SCOPE, feedWorking } from '../core/connections';
 import { useWorkshop } from './store';
 import './connections.css';
 
@@ -29,15 +29,17 @@ export function ConnectionsPanel() {
       {FEEDS.map(([id,name,description])=> {
         const r=d.feeds[id];
         const ok=feedWorking(r,live,now);
-        const label=ok?'Working':!live?'Not connected':!r?'Not reported':r.status==='error'?'Source error':r.status==='not_configured'?'Not configured':'Stale check';
+        const labels={error:'Source error',not_configured:'Not configured',missing_access:'Missing access',unsupported:'Unsupported',stale:'Stale',not_applicable:'Not applicable',blocked:'Blocked',partial:'Partial / unknown',ok:'Stale check'};
+        const label=ok?'Working':!live?'Not connected':!r?'Not reported':r.status==='ok'?'Stale check':labels[r.status];
         return <article key={id} className={`connection-row ${ok?'connection-row--ok':'connection-row--bad'}`} aria-label={`${name}: ${label}`}>
           <div className="connection-row__head"><strong><span aria-hidden="true">● </span>{name}</strong><span>{label}</span></div>
-          <small>{description}</small>
+          <small>{description} · {FEED_SCOPE[id]} for current Armis/Uditus</small>
+          {r?.source?<small>Source: {r.source}</small>:null}
           {r ? <><small>Checked {time(r.checkedAt)} · {r.records} records reported</small><small>Last record: {time(r.lastRecordAt)}</small><small>{r.detail}</small></> : <small>No live source report received.</small>}
         </article>;
       })}
     </div>
-    <p className="muted">A healthy quiet feed can report zero records. A connected stream alone never turns its sources green. Source checks expire after 45 seconds.</p>
+    <p className="muted">A healthy quiet feed can report zero records. A connected stream alone never turns its sources green. Partial evidence is not availability; not-applicable feeds need no integration. Source checks expire after 45 seconds.</p>
     <a href="/mac-mini-diagnostics.txt" download="armis-mac-diagnostics.txt">Download the single Mac terminal block</a>
   </section>;
 }
