@@ -20,7 +20,7 @@ export function CurrentWorkPanel(){
  if(source!=='live')return null;
  return <details className="org" open data-testid="current-work">
   <summary>Current Hermes work</summary><div className="org__body">
-   <p><strong>Partially connected — successful end-to-end delegation is not yet verified.</strong></p>
+   <p><strong>Native activity is not independent acceptance of this turn. Separate reviewed delegation receipts appear in Runtime evidence.</strong></p>
    <p>Progress-source connection: {connection}. Connection health is separate from execution health.</p>
    {connection==='disconnected'&&<p className="warn">Progress source disconnected. Previously loaded progress is stale; current execution is unknown.</p>}
    {data?.state==='unavailable'?<p>{data.gap}</p>:data?.state==='connected'?<>
