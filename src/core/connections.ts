@@ -34,6 +34,10 @@ export interface FeedReport {
   detail: string;
 }
 export interface Diagnostics {
+  observedJournalRecords: number;
+  unmappedObservations: number;
+  unboundObservations: number;
+  journalEvidence: {id:string;type:string;source:string;at:number;role?:string;taskId?:string;attemptId?:string;sessionId?:string;artifactId?:string;reason:string;inputTokens?:number;outputTokens?:number;costMicros?:number;costProvenance?:string;model?:string}[];
   acceptedSnapshots: number;
   acceptedEvents: number;
   rejectedMessages: number;
@@ -42,7 +46,7 @@ export interface Diagnostics {
   lastError: string | null;
   feeds: Partial<Record<FeedId,FeedReport>>;
 }
-const empty = (): Diagnostics => ({acceptedSnapshots:0,acceptedEvents:0,rejectedMessages:0,lastMessageAt:null,lastValidAt:null,lastError:null,feeds:{}});
+const empty = (): Diagnostics => ({observedJournalRecords:0,unmappedObservations:0,unboundObservations:0,journalEvidence:[],acceptedSnapshots:0,acceptedEvents:0,rejectedMessages:0,lastMessageAt:null,lastValidAt:null,lastError:null,feeds:{}});
 let value = empty();
 const listeners = new Set<()=>void>();
 export const diagnostics = {

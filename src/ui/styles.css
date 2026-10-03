@@ -27,7 +27,7 @@
   --u-blue-300: #8fb6d6;
   --sans: Manrope, 'Segoe UI', system-ui, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
-  --pixel: Silkscreen, 'IBM Plex Mono', monospace;
+  --pixel: Manrope, sans-serif;
   --radius: 8px;
   --focus: 0 0 0 3px #070b15, 0 0 0 5px var(--accent);
   color-scheme: dark;
@@ -493,7 +493,7 @@ textarea {
 }
 .scene__canvas {
   display: block;
-  image-rendering: pixelated;
+  image-rendering: auto;
   cursor: grab;
   touch-action: none;
 }

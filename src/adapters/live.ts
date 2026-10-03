@@ -3,6 +3,7 @@ import { normalizeEvent, normalizeSnapshot } from '../core/normalize';
 import type { Snapshot, ActivityEvent } from '../core/types';
 import type { AdapterSink, WorkshopAdapter } from './adapter';
 import { decodeFeedReports, diagnostics } from '../core/connections';
+import { JournalProjection } from './journal';
 
 export type BridgeMessage = {type:'snapshot'; snapshot:Snapshot} | {type:'events'; events:ActivityEvent[]};
 const known = new Map(ROSTER.map(w => [w.id,w]));
@@ -40,12 +41,16 @@ export class LiveBridgeAdapter implements WorkshopAdapter {
   private stream: EventSource | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private ready = false;
+  private hadSnapshot = false;
+  private journal = new JournalProjection();
   constructor(private url: string) {}
   start(sink: AdapterSink) {
     this.stop();
     diagnostics.reset();
     sink.connection('reconnecting');
     this.ready = false;
+    this.hadSnapshot = false;
+    this.journal.reset();
     this.stream = new EventSource(this.url, {withCredentials:true});
     this.stream.onmessage = event => {
       const at=Date.now();
@@ -66,6 +71,7 @@ export class LiveBridgeAdapter implements WorkshopAdapter {
       }
       if (message.type === 'snapshot') {
         this.ready = true;
+        this.hadSnapshot = true;
         diagnostics.update({acceptedSnapshots:diagnostics.get().acceptedSnapshots+1,lastValidAt:at,lastError:null,feeds:{}});
         sink.snapshot(message.snapshot,'connected');
       } else {
@@ -73,7 +79,17 @@ export class LiveBridgeAdapter implements WorkshopAdapter {
         diagnostics.update({acceptedEvents:diagnostics.get().acceptedEvents+message.events.length,lastValidAt:at,lastError:null});
       }
     };
-    this.stream.onerror = () => { this.ready = false; diagnostics.update({lastError:'Stream unavailable; a new validated snapshot is required'}); sink.connection('reconnecting'); };
+    this.stream.onerror = () => { this.ready = false; diagnostics.update({lastError:'Stream unavailable; a new validated snapshot is required'}); sink.connection(this.hadSnapshot?'reconnecting':'disconnected'); };
+    for(const name of ['snapshot','events','heartbeat']) this.stream.addEventListener?.(name,event=>{
+      const at=Date.now();diagnostics.update({lastMessageAt:at});
+      try {
+        if(name!=='snapshot'&&!this.ready)throw Error('Fresh journal snapshot required');
+        const message=this.journal.decode(name,(event as MessageEvent<string>).data,at);
+        if(message.type==='snapshot') {this.ready=true;this.hadSnapshot=true;diagnostics.update({acceptedSnapshots:diagnostics.get().acceptedSnapshots+1,lastValidAt:at,lastError:null,feeds:{}});sink.snapshot(message.snapshot,'connected');}
+        if(message.type==='events'){sink.events(message.events);diagnostics.update({acceptedEvents:diagnostics.get().acceptedEvents+message.events.length,lastValidAt:at,lastError:null});}
+        if(message.type==='heartbeat')diagnostics.update({lastValidAt:at,lastError:null});
+      } catch {this.ready=false;this.journal.reset();diagnostics.update({rejectedMessages:diagnostics.get().rejectedMessages+1,lastError:'Journal continuity or contract invalid; fresh snapshot required'});sink.connection('reconnecting');}
+    });
     sink.tick(Date.now());
     this.timer = setInterval(() => sink.tick(Date.now()),1000);
   }
@@ -84,6 +100,6 @@ export class LiveBridgeAdapter implements WorkshopAdapter {
 
 export function configuredBridgeUrl(): string | null {
   const value = import.meta.env.VITE_ARMIS_BRIDGE_URL;
-  if (!value) return null;
+  if (!value) return typeof window!=='undefined' ? new URL('/api/events',window.location.origin).href : null;
   try { const url = new URL(value); return ['http:','https:'].includes(url.protocol) && !url.username && !url.password ? url.href : null; } catch { return null; }
 }

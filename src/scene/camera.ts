@@ -104,9 +104,10 @@ export class Camera {
   /** Advances any running animation; returns true while moving. */
   update(now: number): boolean {
     if (!this.anim) return false;
+    if(Camera.instant) this.anim.dur=0;
     const { t0, dur, from, to } = this.anim;
     const k = dur <= 0 ? 1 : Math.min(1, (now - t0) / dur);
-    const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+    const e = 1-Math.pow(1-k,5);
     this.cx = from[0] + (to[0] - from[0]) * e;
     this.cy = from[1] + (to[1] - from[1]) * e;
     this.scale = from[2] + (to[2] - from[2]) * e;

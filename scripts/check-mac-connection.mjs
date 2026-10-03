@@ -1,8 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
+import { loopbackFetch } from './loopback-fetch.mjs';
 
 /** Automated, read-only check of the existing Mac viewer protocol. */
-export async function checkMacConnection(fetcher = fetch, origin = 'http://127.0.0.1:4173') {
+export async function checkMacConnection(fetcher = loopbackFetch, origin = 'http://127.0.0.1:4173') {
   const endpoint = new URL(origin);
   if (endpoint.protocol !== 'http:' || endpoint.hostname !== '127.0.0.1' || endpoint.pathname !== '/' || endpoint.search || endpoint.username || endpoint.password) throw Error('Expected loopback viewer origin');
   const base = endpoint.origin;

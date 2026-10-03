@@ -25,6 +25,7 @@ export function ConnectionsPanel() {
       {d.lastError ? <small>{d.lastError}</small> : null}
     </div>
     <p className="mono">{working} / {FEEDS.length} feeds verified</p>
+    {d.observedJournalRecords>0 ? <section aria-label="Runtime projection evidence"><h3>What arrived from the runtime</h3><p>{d.observedJournalRecords} source records · {d.unmappedObservations} without a compatible city visual · {d.unboundObservations} with an unbound runtime role.</p><p className="muted">Unbound roles are not silently turned into city agents. Records without enough detail remain visible here; a task result does not imply accepted work or remaining provider allowance.</p><details><summary>Inspect recent source evidence ({d.journalEvidence.length})</summary>{d.journalEvidence.slice().reverse().map((e)=><article key={e.id} className="connection-row"><strong>{e.type}</strong><small>{e.source} · {time(e.at)}</small><small>{e.reason}</small><small>{[e.role,e.taskId,e.attemptId,e.sessionId,e.artifactId].filter(Boolean).join(' · ')||'No role or job attribution reported'}</small>{e.model?<small>Observed model: {e.model}</small>:null}{e.inputTokens!==undefined||e.outputTokens!==undefined?<small>Recorded tokens: {e.inputTokens??'unreported'} input / {e.outputTokens??'unreported'} output</small>:null}{e.costMicros!==undefined?<small>Recorded cost: {e.costMicros} micro-units · provenance {e.costProvenance??'unreported'}</small>:null}</article>)}</details></section>:null}
     <div aria-label="Source feed status">
       {FEEDS.map(([id,name,description])=> {
         const r=d.feeds[id];
@@ -38,6 +39,6 @@ export function ConnectionsPanel() {
       })}
     </div>
     <p className="muted">A healthy quiet feed can report zero records. A connected stream alone never turns its sources green. Source checks expire after 45 seconds.</p>
-    <a href="/mac-mini-diagnostics.txt" download="armis-mac-diagnostics.txt">Download the single Mac terminal block</a>
+    <p className="muted">The installed updater runs readiness checks automatically. Unverified connections remain visible until the Mini supplies fresh evidence.</p>
   </section>;
 }

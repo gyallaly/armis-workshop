@@ -1,3 +1,4 @@
+import { mainIslandRocks } from './coast';
 import { BUSINESS_BY_ID } from '../core/config';
 import {
   box,
@@ -36,6 +37,8 @@ export interface CampusScene {
   buildings: BuildingHit[];
   /** Art-pixel polylines from HQ to each business entrance. */
   routes: Record<string, Pt[]>;
+  drawShell(ctx: Ctx, id: string, opacity: number): void;
+  draw(ctx: Ctx, openId?: string, shellOpacity?: number, infrastructure?: (ctx: Ctx) => void): void;
   drawAmbient(ctx: Ctx, t: number, motion: boolean, taskFlow?: boolean): void;
 }
 
@@ -70,7 +73,7 @@ const C = {
   cyan: '#3ee6ff',
 };
 
-interface Rect {
+export interface Rect {
   x0: number;
   y0: number;
   x1: number;
@@ -94,11 +97,14 @@ const ROUTES_W: Record<string, Pt[]> = {
   'aster-ledger': [HQ_DOOR, [214, 326], [328, 326], [328, 444], [388, 444], AL_DOOR],
 };
 
+export const CAMPUS_ORIGIN: Pt = [550, 190];
+export const CAMPUS_FOOTPRINTS: Record<string, Rect> = {"hermes-hq": HQ, uditus: UD, "etsy-studio": ET, "aster-ledger": AL };
+
 export function buildCampus(assets: SceneAssets): CampusScene {
   const { canvas, ctx: baseCtx } = makeCanvas(W, H);
   let ctx = baseCtx;
   const iso = new Iso(550, 190);
-  const occluders: { canvas: HTMLCanvasElement; x: number; y: number; depth: number }[] = [];
+  const occluders: { canvas: HTMLCanvasElement; x: number; y: number; depth: number; id?: string }[] = [];
   // Cache physical objects separately so a pedestrian behind a tree or facade
   // can be concealed without rebuilding the city on every animation frame.
   const captureObject = (draw: () => void, x: number, y: number, w: number, h: number, depth: number) => {
@@ -109,8 +115,9 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     draw();
     ctx = prior;
     ctx.drawImage(layer.canvas, x, y);
-    occluders.push({ canvas: layer.canvas, x, y, depth });
+    occluders.push({ canvas: layer.canvas, x, y, depth, id: currentBuilding });
   };
+  let currentBuilding: string | undefined;
   const lights: { x: number; y: number; c: string; r: number; a: number }[] = [];
   const rnd = lcg(20261002);
 
@@ -125,8 +132,8 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   left(ctx, iso, E, 0, E, -1, 0, '#4a4d5c');
   right(ctx, iso, E, 0, E, -1, 0, '#555869');
   top(ctx, iso, 0, 0, E, E, 0, C.grass);
-  stippleTop(ctx, iso, 0, 0, E, E, 0, C.grass2, 0.12, 3);
-  stippleTop(ctx, iso, 0, 0, E, E, 0, C.grass3, 0.04, 5);
+  stippleTop(ctx, iso, 0, 0, E, E, 0, C.grass2, 0.025, 3);
+  stippleTop(ctx, iso, 0, 0, E, E, 0, C.grass3, 0.008, 5);
   // A continuous rear shoreline makes the water separation visible.
   top(ctx, iso, 0, 0, E, 6, 0, C.stone);
   top(ctx, iso, 0, 0, 6, E, 0, C.stone);
@@ -186,7 +193,7 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     box(ctx, iso, x, y, x + 12, y + 12, 0, 4, { top: '#1c3324', left: '#4b4e5c', right: '#3a3d49', rim: '#5d6172' });
   }
 
-  // benches with sitters along the plaza edges
+  // empty benches along the plaza edges
   for (const [bx, by] of [
     [PLAZA.x0 + 26, PLAZA.y1 + 2],
     [PLAZA.x0 + 60, PLAZA.y1 + 2],
@@ -199,7 +206,7 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     px(ctx, sx - 5, sy - 5, '#4a321f', 10, 1);
     px(ctx, sx - 4, sy - 1, '#2a2b33', 1, 2);
     px(ctx, sx + 3, sy - 1, '#2a2b33', 1, 2);
-    miniPerson(ctx, sx - 2, sy - 2, PEOPLE[(bx + by) % PEOPLE.length]!, true);
+
   }
 
   // ------------------------------------------------------------ props list
@@ -219,6 +226,8 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     { x0: 0, y0: E - 30, x1: E, y1: E + 10 },
     { x0: E - 30, y0: 0, x1: E + 10, y1: E },
   ];
+  // Raised supply bridge has a clear landing and maintenance corridor.
+  blocked.push({x0:0,y0:235,x1:68,y1:253},{x0:52,y0:208,x1:68,y1:251},{x0:58,y0:208,x1:218,y1:224});
   const free = (x: number, y: number) => !blocked.some((r) => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1);
 
   // Trees remain inside the shoreline and clear of structures/routes.
@@ -288,8 +297,8 @@ export function buildCampus(assets: SceneAssets): CampusScene {
         wy: y,
         draw: () => {
           umbrellaTable(ctx, iso.x(x, y), iso.y(x, y), color);
-          miniPerson(ctx, iso.x(x, y) - 6, iso.y(x, y) - 1, PEOPLE[(seed + k) % PEOPLE.length]!, true);
-          if (pr() < 0.6) miniPerson(ctx, iso.x(x, y) + 6, iso.y(x, y) - 1, PEOPLE[(seed + k + 3) % PEOPLE.length]!, true);
+
+
         },
       });
       lights.push({ x: iso.x(x, y), y: iso.y(x, y) - 8, c: '#ffcf8a', r: 12, a: 0.35 });
@@ -306,11 +315,21 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   // fountain
   drawFountain(ctx, iso, 272, 272);
 
+  // Soft contact/cast shadows are part of the ground, not detached overlays.
+  for(const r of [HQ,UD,ET,AL]) {
+    ctx.save();ctx.globalAlpha=.18;
+    top(ctx,iso,r.x0+6,r.y0+6,r.x1+18,r.y1+14,0,'#030b14');ctx.restore();
+  }
+  mainIslandRocks(ctx,iso);
+  const ground = makeCanvas(W,H);
+  ground.ctx.drawImage(canvas,0,0);
   const hits: BuildingHit[] = [];
   const drawBuilding = (r: Rect, draw: () => BuildingHit) => {
     const x = Math.floor(iso.x(r.x0, r.y1)) - 50;
     const y = Math.floor(iso.y(r.x0, r.y0)) - 220;
+    currentBuilding = Object.entries(CAMPUS_FOOTPRINTS).find(([, footprint]) => footprint === r)?.[0];
     captureObject(() => hits.push(draw()), x, y, r.x1 - r.x0 + r.y1 - r.y0 + 100, 340, r.x1 + r.y1);
+    currentBuilding = undefined;
   };
   const objects = props.map((p) => ({ depth: p.wx + p.wy, draw: () => drawProp(p) }));
   objects.push(
@@ -352,14 +371,6 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     const [x, y] = side ? [along, E + off] : [E + off, along];
     shimmer.push([iso.x(x, y), iso.y(x, y, -8)]);
   }
-  // decorative pedestrians walking the walkways (ambient only - not workers)
-  const walkers: { route: Pt[]; speed: number; phase: number; look: Look }[] = [];
-  const walkRoutes: Pt[][] = [
-    ...Object.values(routes),
-    [[iso.x(10, E - 13), iso.y(10, E - 13)], [iso.x(E - 13, E - 13), iso.y(E - 13, E - 13)], [iso.x(E - 13, 10), iso.y(E - 13, 10)]],
-    [[iso.x(PLAZA.x0, PLAZA.y1 + 8), iso.y(PLAZA.x0, PLAZA.y1 + 8)], [iso.x(PLAZA.x1 + 8, PLAZA.y1 + 8), iso.y(PLAZA.x1 + 8, PLAZA.y1 + 8)], [iso.x(PLAZA.x1 + 8, PLAZA.y0), iso.y(PLAZA.x1 + 8, PLAZA.y0)]],
-  ];
-  for (let i = 0; i < 22; i++) walkers.push({ route: walkRoutes[i % walkRoutes.length]!, speed: 0.006 + rnd() * 0.01, phase: rnd(), look: PEOPLE[i % PEOPLE.length]! });
   const stars: Pt[] = [];
   for (let i = 0; i < 60; i++) stars.push([rnd() * W, rnd() * 90]);
   const fountainC: Pt = [iso.x(272, 272), iso.y(272, 272)];
@@ -370,26 +381,22 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     base: canvas,
     buildings: hits,
     routes,
-    drawAmbient(g, t, motion, taskFlow = true) {
-      if (taskFlow) for (const route of Object.values(routes)) drawDotted(g, route, '#3ee6ff', 5);
-      const people = walkers.map((w) => {
-        const k = motion ? (w.phase + (t / 1000) * w.speed) % 2 : w.phase;
-        const along = k > 1 ? 2 - k : k;
-        const [x, y] = alongPath(w.route, along);
-        return { w, x, y, depth: (y - iso.oy) * 2 };
-      }).sort((a, b) => a.depth - b.depth);
-      for (const { w, x, y, depth } of people) {
-        miniPerson(g, x, y, w.look, false, motion ? Math.floor(t / 220 + w.phase * 10) % 2 : 0);
+    drawShell(g,id,opacity) {
+      for(const layer of occluders) if(layer.id===id) { g.save(); g.globalAlpha=opacity; g.drawImage(layer.canvas,layer.x,layer.y); g.restore(); }
+    },
+    draw(g, openId, shellOpacity = 0, infrastructure) {
+      if (!openId && !infrastructure) { g.drawImage(canvas,0,0); return; }
+      g.drawImage(ground.canvas,0,0);
+      infrastructure?.(g);
+      for (const layer of occluders) {
         g.save();
-        g.beginPath();
-        g.rect(Math.floor(x) - 5, Math.floor(y) - 14, 11, 16);
-        g.clip();
-        for (const layer of occluders) {
-          if (layer.depth <= depth || layer.x > x + 5 || layer.x + layer.canvas.width < x - 5 || layer.y > y + 2 || layer.y + layer.canvas.height < y - 14) continue;
-          g.drawImage(layer.canvas, layer.x, layer.y);
-        }
+        if (openId && layer.id === openId) g.globalAlpha = shellOpacity;
+        g.drawImage(layer.canvas,layer.x,layer.y);
         g.restore();
       }
+    },
+    drawAmbient(g, t, motion, taskFlow = true) {
+
       if (!motion) return;
       // water shimmer
       for (let i = 0; i < shimmer.length; i++) {
@@ -418,61 +425,19 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   };
 }
 
-function drawDotted(ctx: Ctx, pts: Pt[], color: string, gap: number) {
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [ax, ay] = pts[i]!;
-    const [bx, by] = pts[i + 1]!;
-    const len = Math.hypot(bx - ax, by - ay);
-    for (let d = 0; d < len; d += gap) {
-      const x = ax + ((bx - ax) * d) / len;
-      const y = ay + ((by - ay) * d) / len;
-      px(ctx, x - 1, y - 1, color, 3, 2);
-      px(ctx, x, y - 1, '#c8fbff', 1, 1);
-    }
-  }
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [ax, ay] = pts[i]!;
-    const [bx, by] = pts[i + 1]!;
-    const len = Math.hypot(bx - ax, by - ay);
-    for (let d = 0; d < len; d += 8) glow(ctx, ax + ((bx - ax) * d) / len, ay + ((by - ay) * d) / len, '#1fd2ff', 10, 0.45);
-  }
-}
-
-function drawFountain(ctx: Ctx, iso: Iso, cx: number, cy: number) {
-  const sx = iso.x(cx, cy);
-  const sy = iso.y(cx, cy);
-  // basin ellipse (rim + water)
-  for (let y = -20; y <= 20; y++)
-    for (let x = -42; x <= 42; x++) {
-      const d = (x / 42) ** 2 + (y / 20) ** 2;
-      if (d > 1) continue;
-      const c = d > 0.8 ? '#6a6f84' : d > 0.68 ? '#4b5063' : mix('#0f5a8a', '#1a86c2', 1 - d);
-      px(ctx, sx + x, sy + y, c);
-    }
-  // rim front thickness
-  for (let x = -42; x <= 42; x++) {
-    const y = Math.round(20 * Math.sqrt(Math.max(0, 1 - (x / 42) ** 2)));
-    px(ctx, sx + x, sy + y, '#3b3f4e', 1, 3);
-  }
-  glow(ctx, sx, sy, '#38b6ff', 52, 0.85);
-  // pedestal
-  px(ctx, sx - 3, sy - 14, '#7d8296', 6, 14);
-  px(ctx, sx - 6, sy - 15, '#9aa0b5', 12, 2);
-  // globe (wireframe sphere)
-  const gy = sy - 28;
-  for (let y = -13; y <= 13; y++)
-    for (let x = -13; x <= 13; x++) {
-      const d = Math.sqrt(x * x + y * y);
-      if (d > 13) continue;
-      const onRim = d > 12;
-      const lat = Math.abs(y) % 4 === 0;
-      const lon = Math.abs(Math.round(x / Math.cos(Math.asin(Math.min(1, Math.abs(y) / 13.5))))) % 4 === 0;
-      if (onRim || lat || lon) px(ctx, sx + x, gy + y, onRim ? '#bfe9ff' : '#58c4ff');
-      else px(ctx, sx + x, gy + y, '#123a66');
-    }
-  px(ctx, sx - 16, gy - 1, '#d9a441', 32, 1);
-  px(ctx, sx - 1, gy - 17, '#d9a441', 2, 4);
-  glow(ctx, sx, gy, '#58c4ff', 44, 1);
+function drawFountain(ctx:Ctx,iso:Iso,cx:number,cy:number) {
+ const [x,y]=iso.p(cx,cy);
+ const oval=(rx:number,ry:number,dy:number,color:string)=>{ctx.fillStyle=color;ctx.beginPath();ctx.ellipse(x,y+dy,rx,ry,0,0,Math.PI*2);ctx.fill();};
+ oval(43,21,3,'#283c50');oval(43,21,0,'#6c8392');oval(38,17,0,'#113a56');
+ const water=ctx.createRadialGradient(x-8,y-5,0,x,y,38);water.addColorStop(0,'#3b8aa4');water.addColorStop(1,'#0d304b');ctx.fillStyle=water;ctx.beginPath();ctx.ellipse(x,y,37,16,0,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#729eaf';ctx.lineWidth=.6;ctx.stroke();
+ ctx.fillStyle='#658197';ctx.beginPath();ctx.roundRect(x-3,y-15,6,16,1);ctx.fill();
+ const gy=y-29,glass=ctx.createRadialGradient(x-5,gy-6,0,x,gy,14);glass.addColorStop(0,'#46889d');glass.addColorStop(1,'#123b57');
+ ctx.fillStyle=glass;ctx.beginPath();ctx.arc(x,gy,13,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#90dbea';ctx.lineWidth=.55;
+ for(const rx of [4,9,13]){ctx.beginPath();ctx.ellipse(x,gy,rx,13,0,0,Math.PI*2);ctx.stroke();}
+ for(const dy of [-7,0,7]){ctx.beginPath();ctx.ellipse(x,gy+dy,Math.sqrt(169-dy*dy),2.5,0,0,Math.PI*2);ctx.stroke();}
+ glow(ctx,x,gy,'#59c1df',33,.5);
 }
 
 function windowGrid(
@@ -541,6 +506,9 @@ function drawHQ(ctx: Ctx, iso: Iso, lights: { x: number; y: number; c: string; r
     left(ctx, iso, y1, x0, x1, z, z + 1, '#697b96');
     right(ctx, iso, x1, y0, y1, z, z + 1, '#4a5b77');
   }
+  // Finely spaced podium colonnade grounds the command tower.
+  for(let u=x0+4;u<x1-4;u+=18) left(ctx,iso,y1,u,u+2,0,16,'#697d97');
+  for(let u=y0+4;u<y1-4;u+=18) right(ctx,iso,x1,u,u+2,0,16,'#455e7b');
   // Roof terrace belongs to the podium; no freestanding/floating wings.
   top(ctx, iso, x0 + 3, y0 + 3, x1 - 3, y1 - 3, 28, '#253448');
   for (let u = x0 + 5; u < x1 - 4; u += 8) top(ctx, iso, u, y0 + 64, u + 1, y1 - 4, 28, '#33465b');
@@ -644,15 +612,43 @@ function drawShop(
     left(ctx, iso, r.y1, ET_DOOR[0] - 5, ET_DOOR[0] + 5, 0, 11, '#e9d6ad');
     left(ctx, iso, r.y1, ET_DOOR[0], ET_DOOR[0] + 1, 0, 11, '#70523c');
   }
+  // Entry canopy is attached to the facade and supported at sidewalk grade.
+  if(isU) {
+    top(ctx,iso,r.x1,UD_DOOR[1]-9,r.x1+6,UD_DOOR[1]+9,14,'#6489a8');
+    for(const y of [UD_DOOR[1]-9,UD_DOOR[1]+8]) right(ctx,iso,r.x1+6,y,y+1,0,14,'#739ab6');
+  } else {
+    top(ctx,iso,ET_DOOR[0]-9,r.y1,ET_DOOR[0]+9,r.y1+6,14,'#bb8d62');
+    for(const x of [ET_DOOR[0]-9,ET_DOOR[0]+8]) left(ctx,iso,r.y1+6,x,x+1,0,14,'#9c775b');
+  }
+  // Sculpted roof cornice and fine facade mullions distinguish the studios.
+  for(const u of [r.x0+14,r.x0+38,r.x0+62,r.x1-12]) {
+    left(ctx,iso,r.y1,u,u+1,15,27,shade(wall.rim,1.4));
+  }
+  for(const u of [r.y0+14,r.y0+38,r.y0+62,r.y1-12]) {
+    right(ctx,iso,r.x1,u,u+1,15,27,shade(wall.rim,1.15));
+  }
+  box(ctx,iso,r.x0-1,r.y0-1,r.x1+1,r.y1+1,h-1,h+2,{top:shade(wall.rim,1.3),left:wall.rim,right:shade(wall.rim,.8)});
   // roof
   top(ctx, iso, r.x0 + 2, r.y0 + 2, r.x1 - 2, r.y1 - 2, h, shade(wall.top, 0.8));
   box(ctx, iso, r.x0 + 8, r.y0 + 8, r.x0 + 20, r.y0 + 18, h, h + 6, { top: '#596079', left: '#454b60', right: '#343849' });
   box(ctx, iso, r.x0 + 26, r.y0 + 8, r.x0 + 34, r.y0 + 16, h, h + 4, { top: '#596079', left: '#454b60', right: '#343849' });
   // setback upper tier (penthouse) with its own windows
-  const tier: Rect = { x0: r.x0 + 6, y0: r.y0 + 6, x1: r.x0 + 40, y1: r.y0 + 44 };
-  box(ctx, iso, tier.x0, tier.y0, tier.x1, tier.y1, h, h + 18, { ...wall, rim: wall.rim });
-  windowGrid(ctx, iso, 'left', tier.y1, tier.x0, tier.x1, h, 1, 16, isU ? 61 : 71, lights, { w: 7, gap: 2, litP: 0.8, tall: true });
-  windowGrid(ctx, iso, 'right', tier.x1, tier.y0, tier.y1, h, 1, 16, isU ? 62 : 72, lights, { w: 7, gap: 2, litP: 0.75, tall: true });
+  const tier: Rect = { x0: r.x0 + 6, y0: r.y0 + 6, x1: r.x0 + (isU ? 62 : 40), y1: r.y0 + 44 };
+  const tierH = isU ? 28 : 18;
+  box(ctx, iso, tier.x0, tier.y0, tier.x1, tier.y1, h, h + tierH, { ...wall, rim: wall.rim });
+  windowGrid(ctx, iso, 'left', tier.y1, tier.x0, tier.x1, h, 1, tierH-2, isU ? 61 : 71, lights, { w: 7, gap: 2, litP: 0.8, tall: true });
+  windowGrid(ctx, iso, 'right', tier.x1, tier.y0, tier.y1, h, 1, tierH-2, isU ? 62 : 72, lights, { w: 7, gap: 2, litP: 0.75, tall: true });
+  if(isU) {
+    // Glazed product pavilion with a precisely supported luminous clerestory.
+    box(ctx,iso,tier.x0-1,tier.y0-1,tier.x1+1,tier.y1+1,h+tierH,h+tierH+3,{top:'#6c91ae',left:'#92b6cf',right:'#4c7197'});
+    for(let x=tier.x0+4;x<tier.x1-3;x+=8) top(ctx,iso,x,tier.y0+4,x+6,tier.y1-4,h+tierH+3,'#264357');
+    for(let y=r.y0+10;y<r.y0+36;y+=8) box(ctx,iso,r.x1-22,y,r.x1-7,y+5,h,h+2,{top:'#234258',left:'#718aa0',right:'#3b5268'});
+  } else {
+    // Warm workshop pavilion, roof ribs and grounded craft ventilation stacks.
+    for(let x=tier.x0+1;x<tier.x1;x+=6) top(ctx,iso,x,tier.y0,x+1,tier.y1,h+tierH,'#b88658');
+    box(ctx,iso,r.x1-25,r.y0+10,r.x1-18,r.y0+17,h,h+15,{top:'#bd9c7b',left:'#7f6251',right:'#5f493c'});
+    box(ctx,iso,r.x1-27,r.y0+8,r.x1-16,r.y0+19,h+15,h+17,{top:'#cbb491',left:'#9d7c59',right:'#755b42'});
+  }
   // roof terrace with string lights + plants
   top(ctx, iso, r.x0 + 40, r.y0 + 40, r.x1 - 4, r.y1 - 4, h, '#4a3b33');
   for (let k = 0; k < 3; k++) umbrellaTableAt(ctx, iso, r.x0 + 52 + k * 14, r.y1 - 16, h, k % 2 ? '#3c7ab0' : '#e8e2d6');
@@ -661,6 +657,11 @@ function drawShop(
     const by = r.y0 + 44 + ((k * 7) % (r.y1 - r.y0 - 50));
     bush(ctx, iso.x(bx, by), iso.y(bx, by, h), 4, k * 5 + (isU ? 1 : 2), k % 2 ? '#ffd27a' : undefined);
   }
+  // Roof terrace balustrade: grounded posts, continuous rails, no floating lights.
+  for(let x=r.x0+42;x<r.x1-3;x+=10) left(ctx,iso,r.y1-4,x,x+1,h,h+8,'#acb4b5');
+  left(ctx,iso,r.y1-4,r.x0+42,r.x1-4,h+6,h+7,'#d7ccaa');
+  for(let y=r.y0+44;y<r.y1-3;y+=10) right(ctx,iso,r.x1-4,y,y+1,h,h+8,'#8c9ca7');
+  right(ctx,iso,r.x1-4,r.y0+44,r.y1-4,h+6,h+7,'#aabac6');
   stringLights(ctx, iso.x(r.x0 + 40, r.y1 - 4), iso.y(r.x0 + 40, r.y1 - 4, h + 8), iso.x(r.x1 - 4, r.y1 - 4), iso.y(r.x1 - 4, r.y1 - 4, h + 8), 3);
   stringLights(ctx, iso.x(r.x1 - 4, r.y1 - 4), iso.y(r.x1 - 4, r.y1 - 4, h + 8), iso.x(r.x1 - 4, r.y0 + 40), iso.y(r.x1 - 4, r.y0 + 40, h + 8), 3);
   lights.push({ x: iso.x(r.x1 - 20, r.y1 - 20), y: iso.y(r.x1 - 20, r.y1 - 20, h + 6), c: '#ffd27a', r: 26, a: 0.4 });
@@ -722,8 +723,8 @@ function drawShop(
   const door = isU ? UD_DOOR : ET_DOOR;
   return {
     id,
-    hull: hullOf(iso, r, h + 24),
-    label: [iso.x((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), iso.y((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, h + 34)],
+    hull: hullOf(iso, r, h + tierH + 5),
+    label: [iso.x((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), iso.y((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, h + tierH + 14)],
     focus: [iso.x((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), iso.y((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 20)],
     door: [iso.x(...door), iso.y(...door)],
   };
@@ -803,63 +804,13 @@ function drawTrading(ctx: Ctx, iso: Iso, r: Rect, lights: { x: number; y: number
   };
 }
 
-interface Look {
-  skin: string;
-  top: string;
-  legs: string;
-  hair: string;
-}
-
-const PEOPLE: Look[] = [
-  { skin: '#e0ac82', top: '#3c7ab0', legs: '#22283a', hair: '#2b1d14' },
-  { skin: '#8d5a3b', top: '#c0703a', legs: '#2a2420', hair: '#111111' },
-  { skin: '#f1c7a3', top: '#7a5c8f', legs: '#2c2533', hair: '#8a3b1f' },
-  { skin: '#a8714a', top: '#4f7a52', legs: '#1f2229', hair: '#3b2416' },
-  { skin: '#efc9a8', top: '#d8d2c4', legs: '#353b52', hair: '#c98b3a' },
-  { skin: '#6b4126', top: '#a8433a', legs: '#22201e', hair: '#1a1a1a' },
-];
-
-/** Tiny decorative campus figure (5x10 art px), feet at (x, y). */
-function miniPerson(ctx: Ctx, x: number, y: number, l: Look, sitting: boolean, frame = 0) {
-  const X = Math.round(x) - 2;
-  const Y = Math.round(y);
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.fillRect(X - 1, Y - 1, 6, 1);
-  if (sitting) {
-    px(ctx, X + 1, Y - 3, l.legs, 3, 2);
-    px(ctx, X, Y - 7, l.top, 5, 4);
-    px(ctx, X + 1, Y - 10, l.skin, 3, 3);
-    px(ctx, X + 1, Y - 11, l.hair, 3, 1);
-    return;
-  }
-  px(ctx, X + (frame ? 0 : 1), Y - 4, l.legs, 1, 4);
-  px(ctx, X + (frame ? 3 : 2), Y - 4, l.legs, 1, 4);
-  px(ctx, X, Y - 8, l.top, 5, 4);
-  px(ctx, X + 1, Y - 11, l.skin, 3, 3);
-  px(ctx, X + 1, Y - 12, l.hair, 3, 1);
-}
-
-function alongPath(pts: Pt[], k: number): Pt {
-  let total = 0;
-  for (let i = 0; i < pts.length - 1; i++) total += Math.hypot(pts[i + 1]![0] - pts[i]![0], pts[i + 1]![1] - pts[i]![1]);
-  let d = k * total;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const [ax, ay] = pts[i]!;
-    const [bx, by] = pts[i + 1]!;
-    const seg = Math.hypot(bx - ax, by - ay);
-    if (d <= seg) return [ax + ((bx - ax) * d) / seg, ay + ((by - ay) * d) / seg];
-    d -= seg;
-  }
-  return pts[pts.length - 1]!;
-}
-
 function umbrellaTableAt(ctx: Ctx, iso: Iso, x: number, y: number, z: number, color: string) {
   umbrellaTable(ctx, iso.x(x, y), iso.y(x, y, z), color);
 }
 
 /**
  * Ground-floor glass curtain wall: warm lit panes with desk, monitor and
- * person silhouettes, so you can see into the building as in the mockup.
+ * furniture, so you can see into the building as in the mockup.
  */
 function storefront(ctx: Ctx, iso: Iso, face: 'left' | 'right', plane: number, a0: number, a1: number, lights: { x: number; y: number; c: string; r: number; a: number }[], seed: number, h = 12) {
   const r = lcg(seed);
@@ -869,14 +820,11 @@ function storefront(ctx: Ctx, iso: Iso, face: 'left' | 'right', plane: number, a
   for (let u = a0 + 2; u + paneW <= a1 - 1; u += paneW + 1) {
     fill(u, u + paneW, 1, h, '#f3c46a');
     fill(u, u + paneW, h - 2, h, '#ffe2a6');
-    // interior: desk, glowing monitor, a seated person
+    // interior: desk, glowing monitor, an empty chair
     fill(u + 2, u + 9, 2, 4, '#5a3d26');
     if (r() < 0.8) fill(u + 4, u + 7, 4, 7, '#1b2433');
     if (r() < 0.8) fill(u + 5, u + 6, 5, 6, '#5ad1ff');
-    if (r() < 0.6) {
-      fill(u + 8, u + 10, 2, 6, '#2b2230');
-      fill(u + 8, u + 10, 6, 8, '#3a2a1e');
-    }
+
     // mullion
     fill(u + paneW, u + paneW + 1, 0, h, '#3a3f4e');
     const mid = u + paneW / 2;

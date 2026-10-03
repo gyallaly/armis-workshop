@@ -78,7 +78,7 @@ export function TopBar() {
       <nav className="crumbs" aria-label="Breadcrumb">
         <ol>
           <li>
-            <button className={`crumb ${view.mode === 'campus' ? 'is-current' : ''}`} aria-current={view.mode === 'campus' ? 'page' : undefined} onClick={() => ui.go({ mode: 'campus' })}>
+            <button className={`crumb ${view.mode === 'campus' ? 'is-current' : ''}`} aria-current={view.mode === 'campus' ? 'page' : undefined} onClick={() => { ui.go({ mode: 'campus' }); window.dispatchEvent(new Event('armis:campus-reset')); }}>
               Campus
             </button>
           </li>
@@ -93,6 +93,8 @@ export function TopBar() {
       </nav>
       <nav className="nav" aria-label="Views">
         <BusinessesMenu />
+        <button className={`nav__btn ${tab === 'power' ? 'is-on' : ''}`} onClick={() => ui.setPrefs({ tab: 'power' })}>Power station</button>
+        <button className={`nav__btn ${tab === 'guide' ? 'is-on' : ''}`} onClick={() => ui.setPrefs({ tab: 'guide' })}>Guide</button>
         <button className={`nav__btn ${tab === 'connections' ? 'is-on' : ''}`} onClick={()=>ui.setPrefs({tab:'connections'})}>Connections</button>
         <button className={`nav__btn ${tab === 'tasks' ? 'is-on' : ''}`} onClick={() => ui.setPrefs({ tab: 'tasks' })}>
           <Icon name="list" /> Tasks
@@ -194,6 +196,7 @@ export function DemoBar() {
             <span>Scenario</span>
             <select
               title={scenario?.description}
+              aria-label="Scenario"
               value={demo.scenario}
               onChange={(e) => {
                 const id = e.target.value as ScenarioId;
@@ -215,7 +218,7 @@ export function DemoBar() {
               ui.select(null);
               ctrl.reset();
             }}
-            title="Replay this scenario from the start (same seed, same events)"
+            title="Start a new simulated usage epoch with the same seed. Owner shutdowns and allocation limits remain in force."
           >
             <Icon name="reset" size={14} /> Reset
           </button>

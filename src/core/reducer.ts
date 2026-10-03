@@ -222,7 +222,7 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
   let outOfOrder = false;
 
   // Any event about a worker counts as an observation of that worker.
-  if (e.workerId && s.statuses[e.workerId]) {
+  if (e.type !== 'worker.provider' && e.workerId && s.statuses[e.workerId]) {
     const st = s.statuses[e.workerId]!;
     if (e.sourceTs > st.lastObservedAt) s.statuses = { ...s.statuses, [e.workerId]: { ...st, lastObservedAt: e.sourceTs } };
   }
@@ -429,6 +429,18 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
         lastObservedAt: Math.max(prev?.lastObservedAt ?? 0, e.sourceTs),
       };
       s.statuses = { ...s.statuses, [e.workerId]: next };
+      break;
+    }
+    case 'worker.provider': {
+      if(!e.workerId)break;
+      const key=`provider:${e.workerId}`;
+      if(!isFresh(clock,key,e.sourceTs)){outOfOrder=true;break;}
+      clock[key]=e.sourceTs;
+      const prior=s.statuses[e.workerId];
+      const worker=s.workers[e.workerId];
+      s.statuses={...s.statuses,[e.workerId]:{...(prior??{workerId:e.workerId,state:'unknown' as const,departmentId:worker?.homeDepartmentId??'unknown',stateSince:0,lastObservedAt:0}),provider:p.provider as ProviderRef}};
+      const attempt=e.attemptId?s.attempts[e.attemptId]:undefined;
+      if(attempt&&attempt.workerId===e.workerId)s.attempts={...s.attempts,[attempt.id]:{...attempt,provider:p.provider as ProviderRef}};
       break;
     }
     case 'worker.heartbeat': {

@@ -247,9 +247,10 @@ export interface Measured<T> {
 export type Availability = 'available' | 'limited' | 'unavailable' | 'unknown';
 
 export interface ProviderCapacity {
+  quotaWindows?: { id: string; label: string; unit: 'requests' | 'tokens'; total: Measured<number>; remaining: Measured<number>; resetAt: Measured<Millis>; observedAt: Millis }[];
   id: CapacityId;
   provider: string;
-  scope: { kind: 'account' | 'project' | 'organization'; label: string };
+  scope: { kind: 'account' | 'project' | 'organization' | 'unknown'; label: string };
   models: string[];
   modelsIllustrative: boolean;
   availability: Measured<Availability>;
@@ -297,6 +298,7 @@ export type ActivityEventType =
   | 'artifact.recorded'
   | 'worker.state'
   | 'worker.heartbeat'
+  | 'worker.provider'
   | 'capacity.updated'
   | 'redirect.acknowledged'
   | 'redirect.applied'

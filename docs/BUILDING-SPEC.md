@@ -4,12 +4,13 @@ This is the implementation contract for agents adding or changing city buildings
 
 ## Purpose and setting
 
-The city reflects ARMIS: persistent identities, companies, departments, workers and jobs. It is a night-time isometric pixel city on one island, surrounded by open water. Geometry must be precise and interactions must reveal truthful system information. Decorative pedestrians are ambient characters, never evidence of agent execution.
+The city reflects ARMIS: persistent identities, companies, departments, workers and jobs. It is a night-time isometric architectural city on one island, surrounded by open water. Geometry must be precise and interactions must reveal truthful system information. Decorative pedestrians are ambient characters, never evidence of agent execution.
 
 ## Expansion rules
 
 - The current island occupies world coordinates x=0..480, y=0..480 in src/scene/campus.ts. Buildings, landscaping and pedestrian routes must stay on land. Water starts outside this boundary. The seawall and promenade define its edge.
 - Do not add background buildings, hidden mainland, disconnected bridges or props floating over water. Expand the island boundary deliberately before adding a district that cannot fit. Update shoreline, promenade, camera fit, minimap and paths together.
+- The offshore power island has a shared circular plan centered at world (-192,206), radius 70, with irregular coastal rocks out to radius 82. Its nearest edge remains more than 100 world units offshore. Use `powerLayout` for placement, camera fit, elevated conduit routes and support locations; use the same placement for reactor hits and labels. It has no permanent decorative agents. Its reactors represent observed provider scopes, never imaginary companies.
 - Plan each footprint, entrance, height, signage zone, label anchor and route before drawing. Reserve clear approach space and room for landscaping. Do not squeeze buildings into leftover gaps.
 - Keep real operational buildings visually distinct. Decorative structures must not imply companies or agents that do not exist. Do not create interactive empty buildings unless the user requested them.
 
@@ -19,16 +20,20 @@ Record the stable city ID, corresponding Control business/role ID, display name,
 
 ## Exterior geometry and art
 
-- Use shared Iso/pixel helpers and the existing art scale. Foundations touch the land plane; roofs, walls and windows align with their face projection.
+- Use shared Iso/architectural helpers and logical world coordinates. High-resolution texture caches do not alter footprints or camera coordinates. Foundations touch the land plane; roofs, walls and windows align with their face projection. Use smooth polygons and material gradients throughout the city.
 - Allocate wall signs before windows, screens and posters. Signs have a clear rectangular area with no decoration behind their lettering.
 - Define the BuildingHit hull, label, focus and door from the same footprint used to draw it. Hit areas must follow the visible structure and not steal adjacent interactions.
 - Include every physical object in foreground occlusion caches. Preserve finished artwork in those layers. Sort by world depth; pedestrians behind a facade or tree must be concealed.
 - Exterior task routes reach the actual entrance, avoid footprints and stay on connected paths. Update tree/prop exclusion zones whenever paths or buildings change.
-- Keep lighting local and coherent. Water reflections stay on water. No unrelated style, blur or new pixel scale for an individual building.
+- Power conduits run at elevation 12 on piers/crossbars with ground-level terminal risers. Shared routes are explicit trunks, not two pipes drawn on top of each other. Reserve the shore landing and maintenance corridor from trees and rocks. Static dotted route guides must not be layered over the physical supply network.
+- Keep lighting local and coherent. Water reflections stay on water. Keep the same material, lighting and texture resolution conventions across buildings.
 
 ## Interior and movement
 
 - Define departments and floors from business configuration, with actual doorway gaps in wall geometry. A painted floor patch is not an opening.
+- Selected buildings reveal Floor 01 in the same campus footprint through `floorTransform`; do not restore separate interior backdrops or cameras. Future floors must share spatial identity, world placement and hit transforms. Shell dissolve respects reduced motion.
+- Fit floor plan dimensions through `floorPlanScale` and the interior `Iso` before rasterization. The final world transform must use uniform scale and translation so walls, furniture and people remain upright. Do not shear a finished floor image to fit its exterior.
+- Scenery with no building ID stays visible at every zoom/view level. Apply shell opacity only when an explicit selected building ID matches the cached layer ID.
 - Rendering and navigation share physical obstacle footprints. Route workers and task traffic through doors and clear corridors, around desks and furniture. Raised monitors/lintels occlude but do not block the floor.
 - Assign unique reachable desk seats. Lounge seats require approach/departure points in front of furniture. Every configured seat and department route must be reachable.
 - Draw actors with foreground occlusion, preserving wall/furniture details and glass transparency. Never repaint opaque rectangles over characters.

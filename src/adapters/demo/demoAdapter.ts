@@ -1,7 +1,7 @@
 import { Rng } from '../../core/rng';
 import type { ActivityEvent, Millis, RedirectRequest } from '../../core/types';
 import type { AdapterSink, RedirectResult, WorkshopAdapter } from '../adapter';
-import { DemoSim, SCENARIOS, type ScenarioId } from './sim';
+import { DemoSim, SCENARIOS, type ScenarioId, type DemoCompanyPolicy } from './sim';
 
 export interface DemoOptions {
   seed?: number;
@@ -32,6 +32,7 @@ export class DemoAdapter implements WorkshopAdapter {
   private dropUntil: Millis | null = null;
   private outages: { at: Millis; end: Millis }[] = [];
   private listeners = new Set<DemoListener>();
+  private companyPolicies: Record<string, DemoCompanyPolicy> = {};
 
   seed: number;
   scenario: ScenarioId;
@@ -71,6 +72,9 @@ export class DemoAdapter implements WorkshopAdapter {
 
   private boot() {
     this.sim = new DemoSim(this.seed, this.scenario);
+    // Apply owner fences before warming the new simulation epoch. Replay and
+    // scenario changes must never resurrect a company behind the inspector.
+    for (const [businessId, policy] of Object.entries(this.companyPolicies)) this.sim.companyPolicy(businessId, policy);
     this.quirks = new Rng(this.seed ^ 0x5bd1e995);
     this.carry = [];
     this.dropUntil = null;
@@ -151,6 +155,14 @@ export class DemoAdapter implements WorkshopAdapter {
   }
 
   // ------------------------------------------------------------- controls
+
+  companyUsage(businessId: string) { return this.sim.companyUsage(businessId); }
+  companyPolicy(businessId: string, patch: DemoCompanyPolicy) {
+    const events = this.sim.companyPolicy(businessId, patch);
+    this.companyPolicies[businessId] = { ...this.companyPolicies[businessId], ...patch };
+    this.carry = this.carry.filter((e) => e.businessId !== businessId);
+    if (!this.wasDropping) this.sink?.events(events);
+  }
 
   subscribe(fn: DemoListener): () => void {
     this.listeners.add(fn);

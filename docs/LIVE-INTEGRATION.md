@@ -1,5 +1,9 @@
 # Live integration contract
 
+## V2 implementation update
+
+See [V2-RUNTIME-CONTRACT.md](V2-RUNTIME-CONTRACT.md) for the executable loopback server, named journal protocol reconciliation, durable owner-policy gates, configured supported Hermes executor contract and automated deployment checks. The default browser Live source is same-origin `/api/events`; Vite has no telemetry service and remains unconfirmed. An explicitly supplied VITE_ARMIS_BRIDGE_URL still supports the original canonical data-message contract below. Live owner commands require separately verified complete executor coverage; they are disabled when it is absent. This PC has not verified Mac deployment, chat, provider entitlements or actual system-wide shutdown coverage.
+
 The browser has a read-only SSE adapter in `src/adapters/live.ts`. Set `VITE_ARMIS_BRIDGE_URL` to an explicitly supplied HTTP(S) telemetry endpoint, restart Vite, and select Live. Without configuration, `DisconnectedLiveAdapter` reports disconnected. No Mac mini endpoint has been supplied or verified. The browser never contacts providers or trading venues directly.
 
 The endpoint returns `text/event-stream`, using ordinary SSE `data:` messages containing JSON. Its first message, and the first message after each reconnect, must be `{ "type": "snapshot", "snapshot": <Snapshot> }`. Later messages are `{ "type": "events", "events": <ActivityEvent[]> }`. Contracts are in `src/core/types.ts`; snapshots include all required collections, including empty ones. Every snapshot must reflect verified runtime observations, not simulation. The bridge maps Control business IDs explicitly to city IDs and stable role IDs to observed session/attempt IDs.

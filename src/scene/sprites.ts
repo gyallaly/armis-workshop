@@ -2,7 +2,7 @@ import type { Appearance } from '../core/types';
 import { type Ctx, hex, lcg, makeCanvas, mix, px, shade } from './pixel';
 
 /**
- * Original procedural sprites, drawn in code at art-pixel resolution. No
+ * Original pixel-art agents with smooth architectural landscaping. No
  * third-party artwork is used; see ASSETS.md.
  */
 
@@ -258,147 +258,37 @@ export type IconKind = 'hourglass' | 'hand' | 'alert' | 'plug' | 'question' | 'c
 const iconCache = new Map<string, HTMLCanvasElement>();
 
 /** 11x11 speech-bubble icons. Paired with text in the UI, never colour alone. */
-export function iconSprite(kind: IconKind): HTMLCanvasElement {
-  const hit = iconCache.get(kind);
-  if (hit) return hit;
-  const { canvas, ctx } = makeCanvas(11, 12, true);
-  const bg: Record<IconKind, string> = {
-    hourglass: '#ffd36b',
-    hand: '#ffb86b',
-    alert: '#ff6b6b',
-    plug: '#9aa3b5',
-    question: '#c7cedb',
-    coffee: '#f0e2c8',
-    zzz: '#b9c7ff',
-  };
-  px(ctx, 1, 0, bg[kind], 9, 9);
-  px(ctx, 0, 1, bg[kind], 11, 7);
-  px(ctx, 4, 9, bg[kind], 3, 1);
-  px(ctx, 5, 10, bg[kind], 1, 1);
-  const ink = '#1a1d29';
-  switch (kind) {
-    case 'hourglass':
-      px(ctx, 3, 1, ink, 5, 1);
-      px(ctx, 3, 7, ink, 5, 1);
-      px(ctx, 4, 2, ink, 3, 1);
-      px(ctx, 5, 3, ink, 1, 3);
-      px(ctx, 4, 6, ink, 3, 1);
-      break;
-    case 'hand':
-      px(ctx, 3, 2, ink, 1, 4);
-      px(ctx, 4, 1, ink, 1, 5);
-      px(ctx, 5, 1, ink, 1, 5);
-      px(ctx, 6, 2, ink, 1, 4);
-      px(ctx, 7, 4, ink, 1, 2);
-      px(ctx, 4, 6, ink, 3, 1);
-      break;
-    case 'alert':
-      px(ctx, 5, 1, '#fff', 1, 4);
-      px(ctx, 5, 6, '#fff', 1, 1);
-      break;
-    case 'plug':
-      px(ctx, 3, 2, ink, 1, 2);
-      px(ctx, 6, 2, ink, 1, 2);
-      px(ctx, 2, 4, ink, 6, 2);
-      px(ctx, 4, 6, ink, 2, 2);
-      px(ctx, 8, 1, '#c0392b', 1, 1);
-      px(ctx, 2, 7, '#c0392b', 1, 1);
-      break;
-    case 'question':
-      px(ctx, 3, 1, ink, 4, 1);
-      px(ctx, 7, 2, ink, 1, 2);
-      px(ctx, 5, 4, ink, 2, 1);
-      px(ctx, 5, 5, ink, 1, 1);
-      px(ctx, 5, 7, ink, 1, 1);
-      break;
-    case 'coffee':
-      px(ctx, 3, 3, '#6b3f22', 4, 4);
-      px(ctx, 7, 4, '#6b3f22', 1, 2);
-      px(ctx, 4, 1, '#ffffff', 1, 1);
-      px(ctx, 5, 2, '#ffffff', 1, 1);
-      break;
-    case 'zzz':
-      px(ctx, 3, 2, ink, 4, 1);
-      px(ctx, 5, 3, ink, 1, 1);
-      px(ctx, 4, 4, ink, 1, 1);
-      px(ctx, 3, 5, ink, 4, 1);
-      break;
-  }
-  outline(canvas);
-  iconCache.set(kind, canvas);
-  return canvas;
+export function iconSprite(kind:IconKind):HTMLCanvasElement {
+ const hit=iconCache.get(kind);if(hit)return hit;
+ const {canvas,ctx}=makeCanvas(11,12);
+ const colors:Record<IconKind,string>={hourglass:'#ffd36b',hand:'#ffb86b',alert:'#ff6b6b',plug:'#9aa3b5',question:'#c7cedb',coffee:'#f0e2c8',zzz:'#b9c7ff'};
+ ctx.fillStyle=colors[kind];ctx.beginPath();ctx.roundRect(.5,.5,10,9,2);ctx.fill();
+ ctx.beginPath();ctx.moveTo(4,9);ctx.lineTo(6,11);ctx.lineTo(7,9);ctx.fill();
+ ctx.fillStyle='#1a2637';ctx.font='bold 8px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+ ctx.fillText({hourglass:'⋈',hand:'Ⅱ',alert:'!',plug:'×',question:'?',coffee:'C',zzz:'z'}[kind],5.5,5);
+ iconCache.set(kind,canvas);return canvas;
 }
 
 // ------------------------------------------------------------------- props
 
-export function tree(ctx: Ctx, x: number, y: number, size: number, seed: number, kind: 'round' | 'pine' | 'blossom' = 'round') {
-  const r = lcg(seed);
-  const trunk = '#3b2a1f';
-  const th = Math.round(size * 0.45);
-  px(ctx, x - 1, y - th, trunk, 2, th);
-  px(ctx, x, y - th, shade(trunk, 0.7), 1, th);
-  if (kind === 'pine') {
-    const base = '#163322';
-    const mid = '#1f4430';
-    const hi = '#2f6143';
-    const h = size * 1.6;
-    for (let i = 0; i < h; i++) {
-      const w = Math.round((i / h) * size * 0.75) + 1;
-      const yy = Math.round(y - th - h + i);
-      px(ctx, x - w, yy, base, w * 2, 1);
-      px(ctx, x - w, yy, mid, Math.max(1, w - 1), 1);
-      if (i % 4 === 0) px(ctx, x - w + 1, yy, hi, Math.max(1, Math.floor(w / 2)), 1);
-    }
-    return;
-  }
-  const cols =
-    kind === 'blossom'
-      ? ['#4a2350', '#6e3478', '#9a4fa3', '#c97bd0', '#f0b6ef']
-      : ['#13281b', '#1b3a26', '#24502f', '#33683d', '#4f8a50'];
-  const cy = y - th - size * 0.7;
-  const blobs: [number, number, number][] = [];
-  const nb = 5 + Math.floor(r() * 3);
-  for (let i = 0; i < nb; i++) {
-    const ang = r() * Math.PI * 2;
-    const d = r() * size * 0.45;
-    blobs.push([x + Math.cos(ang) * d, cy + Math.sin(ang) * d * 0.7, size * (0.42 + r() * 0.25)]);
-  }
-  blobs.push([x, cy, size * 0.6]);
-  const R = Math.ceil(size * 1.3);
-  for (let yy = Math.floor(cy - R); yy <= cy + R; yy++) {
-    for (let xx = Math.floor(x - R); xx <= x + R; xx++) {
-      let best = -1;
-      let lightTerm = 0;
-      for (const [bx, by, br] of blobs) {
-        const dx = xx - bx;
-        const dy = (yy - by) * 1.15;
-        const d = Math.sqrt(dx * dx + dy * dy) / br;
-        if (d <= 1 && (best < 0 || d < best)) {
-          best = d;
-          lightTerm = (-dx - dy) / br; // light from upper-left
-        }
-      }
-      if (best < 0) continue;
-      let k = 1.4 + lightTerm * 1.3 - best * 0.8 + (((xx * 7 + yy * 13) & 3) === 0 ? 0.5 : 0);
-      k = Math.max(0, Math.min(cols.length - 1, Math.round(k)));
-      px(ctx, xx, yy, cols[k]!);
-    }
-  }
+export function tree(ctx:Ctx,x:number,y:number,size:number,seed:number,kind:'round'|'pine'|'blossom'='round') {
+ const random=lcg(seed),h=size*.7;
+ ctx.fillStyle='rgba(0,0,0,.19)';ctx.beginPath();ctx.ellipse(x+3,y,size*.75,size*.25,0,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='#5b4b39';ctx.lineWidth=1.3;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y-h*1.7);ctx.stroke();
+ const cy=y-h-size*.6;
+ const colors=kind==='blossom'?['#6c456e','#cb96be']:['#183b31','#567a52'];
+ for(let i=0;i<7;i++) {
+  const angle=i*Math.PI*2/7,r=size*(.4+random()*.2),bx=x+Math.cos(angle)*size*.35,by=cy+Math.sin(angle)*size*.23;
+  const grad=ctx.createRadialGradient(bx-r*.3,by-r*.4,0,bx,by,r);
+  grad.addColorStop(0,colors[1]!);grad.addColorStop(1,colors[0]!);ctx.fillStyle=grad;
+  ctx.beginPath();ctx.ellipse(bx,by,r,r*(kind==='pine'?1.4:.8),0,0,Math.PI*2);ctx.fill();
+ }
 }
 
-export function bush(ctx: Ctx, x: number, y: number, w: number, seed: number, flowers?: string) {
-  const r = lcg(seed);
-  const cols = ['#142a1c', '#1d3b27', '#285233', '#3b6e43'];
-  const h = Math.max(3, Math.round(w * 0.55));
-  for (let yy = 0; yy < h; yy++)
-    for (let xx = -w; xx <= w; xx++) {
-      const nx = xx / w;
-      const ny = (h - yy) / h;
-      if (nx * nx + ny * ny * 1.2 > 1.05 - r() * 0.15) continue;
-      const k = Math.max(0, Math.min(3, Math.round(1 + ny * 1.5 - nx * 0.8 + (r() < 0.2 ? 1 : 0))));
-      px(ctx, x + xx, y - yy, cols[k]!);
-      if (flowers && r() < 0.06) px(ctx, x + xx, y - yy, flowers);
-    }
+export function bush(ctx:Ctx,x:number,y:number,w:number,seed:number,flowers?:string) {
+ const grad=ctx.createLinearGradient(0,y-w,0,y);grad.addColorStop(0,'#587b53');grad.addColorStop(1,'#1c4234');
+ ctx.fillStyle=grad;ctx.beginPath();ctx.ellipse(x,y-w*.25,w,w*.45,0,0,Math.PI*2);ctx.fill();
+ if(flowers) {const random=lcg(seed);ctx.fillStyle=flowers;for(let i=0;i<5;i++){ctx.beginPath();ctx.arc(x+(random()-.5)*w*1.4,y-random()*w*.5,.6,0,Math.PI*2);ctx.fill();}}
 }
 
 export function lampPost(ctx: Ctx, x: number, y: number, h = 14) {

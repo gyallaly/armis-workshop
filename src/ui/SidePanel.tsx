@@ -12,6 +12,7 @@ import { Icon } from './Icon';
 import { store, ui, useUi, useWorkshop } from './store';
 import { OrganizationPanel } from './OrganizationPanel';
 import { ConnectionsPanel } from './ConnectionsPanel';
+import { PowerPanel, GuidePanel, CompanyControls } from './V2Panels';
 
 export const STATE_ICON: Record<WorkerState, string> = {
   active: 'bolt',
@@ -528,10 +529,13 @@ export function SidePanel() {
   const state = useWorkshop((s) => s);
   const selection = useUi((s) => s.selection);
   const tab = useUi((s) => s.prefs.tab);
+  const view = useUi((s) => s.view);
   let content;
   if (tab === 'tasks') content = <TaskList state={state} />;
   else if (tab === 'capacity') content = <CapacityPanel />;
   else if (tab === 'connections') content = <ConnectionsPanel />;
+  else if (tab === 'power' || selection?.kind === 'power') content = <PowerPanel />;
+  else if (tab === 'guide') content = <GuidePanel />;
   else if (selection?.kind === 'worker' && state.workers[selection.id]) content = <WorkerDetail state={state} worker={state.workers[selection.id]!} />;
   else if (selection?.kind === 'task' && state.tasks[selection.id]) content = <TaskDetail state={state} task={state.tasks[selection.id]!} />;
   else if (selection?.kind === 'dot' && state.tasks[selection.dot.taskId]) content = <TaskDetail state={state} task={state.tasks[selection.dot.taskId]!} />;
@@ -541,6 +545,8 @@ export function SidePanel() {
     ['tasks', 'Tasks'],
     ['capacity', 'AI capacity'],
     ['connections', 'Connections'],
+    ['power', 'Power'],
+    ['guide', 'Guide'],
   ];
   return (
     <aside className="panel" aria-label="Details">
@@ -552,6 +558,7 @@ export function SidePanel() {
         ))}
       </div>
       <div className="panel__body" id="panel-body" role="tabpanel" aria-labelledby={`tab-${tab}`}>
+        {view.mode === 'interior' && tab === 'activity' ? <CompanyControls businessId={view.businessId} /> : null}
         {content}
       </div>
     </aside>

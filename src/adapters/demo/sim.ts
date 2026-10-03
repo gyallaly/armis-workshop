@@ -99,6 +99,7 @@ function ledgerScenario(id: ScenarioId): LedgerScenario {
 }
 
 interface CapModel {
+  total?: number;
   id: string;
   provider: string;
   scope: ProviderCapacity['scope'];
@@ -148,6 +149,7 @@ const STAGE_MS: Record<string, [number, number]> = {
 const WORK_STAGES: TaskStage[] = ['audit', 'fixes', 'creation', 'research'];
 const LEDGER_STAGES: TaskStage[] = ['portfolio', 'audit', 'rules', 'research', 'feeds', 'trader_watch'];
 const LEDGER_CRITERIA = ['Primary source identified', 'Contract rules match the thesis', 'Executable quote fresh (< 60 s)', 'Edge clears threshold after fees'];
+export interface DemoCompanyPolicy { lifecycle?: 'running' | 'draining' | 'stopped'; weight?: number; maxConcurrent?: number; tokenLimit?: number | null; requestLimit?: number | null; spendLimitMicros?: number | null; allowedProviders?: string[] | null }
 
 export class DemoSim {
   readonly seed: number;
@@ -170,11 +172,37 @@ export class DemoSim {
   private failuresLeft: Record<string, number> = { uditus: 1, 'etsy-studio': 1 };
   readonly ledger: LedgerModel;
   private ledgerAudits = 0;
+  private policies: Record<string, DemoCompanyPolicy & { lifecycle: 'running' | 'draining' | 'stopped'; weight: number; maxConcurrent: number }> = {};
+  private nextAdmission: Record<string, number> = {};
+  private usage: Record<string, { consumedTokens: number; consumedRequests: number }> = {};
+  companyUsage(businessId: string) { return this.usage[businessId] ?? { consumedTokens: 0, consumedRequests: 0 }; }
+
+  companyPolicy(businessId: string, patch: DemoCompanyPolicy): ActivityEvent[] {
+    if (patch.spendLimitMicros != null) throw new Error('Simulated cost attribution is unavailable; a spend cap cannot be enforced.');
+    const policy = { lifecycle: 'running' as const, weight: 25, maxConcurrent: 3, ...this.policies[businessId], ...patch };
+    this.policies[businessId] = policy;
+    if (policy.lifecycle === 'stopped') {
+      for (const run of [...this.runs.values()].filter((r) => r.businessId === businessId)) {
+        this.runs.delete(run.attemptId);
+        this.busy.delete(run.workerId);
+        this.emit('attempt.finished', this.ids(run), { outcome: 'aborted' });
+        this.emit('task.status', this.ids(run), { status: 'held', reason: 'Owner shutdown (simulated)' });
+      }
+      for (const worker of ROSTER.filter((w) => w.businessId === businessId)) this.emit('worker.state', { businessId, workerId: worker.id }, { state: 'idle', departmentId: loungeOf(businessId), action: 'Company stopped by owner (simulated)' });
+    }
+    if (patch.lifecycle === 'running') for (const task of Object.values(this.truth.tasks).filter((t) => t.businessId === businessId && t.status === 'held' && t.heldReason === 'Owner shutdown (simulated)')) this.emit('task.status', { businessId, taskId: task.id }, { status: 'queued' });
+    const usage = this.companyUsage(businessId);
+    if ((policy.tokenLimit == null || policy.tokenLimit > usage.consumedTokens) && (policy.requestLimit == null || policy.requestLimit > usage.consumedRequests)) for (const task of Object.values(this.truth.tasks).filter((t) => t.businessId === businessId && t.status === 'held' && t.heldReason === 'Owner usage bound exhausted (simulated)')) this.emit('task.status', { businessId, taskId: task.id }, { status: 'queued' });
+    const events = this.out;
+    this.out = [];
+    return events;
+  }
 
   constructor(seed = 7, scenarioId: ScenarioId = 'steady') {
     this.seed = seed;
     this.scenario = SCENARIOS.find((s) => s.id === scenarioId) ?? SCENARIOS[0]!;
     this.rng = new Rng(seed * 7919 + this.scenario.id.length * 104729);
+    this.policies.uditus = { lifecycle: 'running', weight: 25, maxConcurrent: 1 };
     this.truth = initialState(ROSTER, 'demo', DEMO_EPOCH);
     // Aster Ledger has its own RNG stream so its data stays isolated from the other businesses.
     this.ledger = new LedgerModel(DEMO_EPOCH, ledgerScenario(this.scenario.id), new Rng(seed * 31 + 7));
@@ -294,6 +322,7 @@ export class DemoSim {
       availabilityProv: 'provider_reported',
       availabilityNote: 'Rate-limit headers (simulated)',
       remaining: 140,
+      total: 200,
       remainingProv: 'provider_reported',
       remainingNote: 'x-ratelimit-remaining (simulated)',
       unit: 'requests',
@@ -350,6 +379,7 @@ export class DemoSim {
           availabilityProv: 'provider_reported',
           availabilityNote: 'Usage window reset (simulated)',
           remaining: 500,
+          total: 500,
           remainingProv: 'provider_reported',
           resetAt: this.t + 5 * 3600_000,
           resetProv: 'provider_reported',
@@ -393,6 +423,7 @@ export class DemoSim {
       modelsIllustrative: true,
       availability: { value: c.availability, provenance: c.availabilityProv, note: c.availabilityNote },
       remaining: { value: c.remaining, provenance: c.remainingProv, note: c.remainingNote, unit: c.unit },
+      quotaWindows: [{ id: `${c.id}-requests`, label: 'Illustrative request window', unit: 'requests', total: { value: c.total ?? null, provenance: c.total !== undefined ? 'provider_reported' : 'unknown', note: 'Simulated fixture; not an actual subscription allowance' }, remaining: { value: c.remaining, provenance: c.remainingProv }, resetAt: { value: c.resetAt, provenance: c.resetProv }, observedAt: c.lastCheckedAt ?? this.t }],
       resetAt: { value: c.resetAt, provenance: c.resetProv },
       local: {
         requests: { value: c.requests, provenance: 'locally_measured' },
@@ -417,6 +448,7 @@ export class DemoSim {
   // ----------------------------------------------------------------- loops
 
   private creationLoop(biz: string) {
+    if (this.policies[biz]?.lifecycle && this.policies[biz]!.lifecycle !== 'running' || this.policies['hermes-hq']?.lifecycle === 'stopped') { this.after(45_000, () => this.creationLoop(biz)); return; }
     const open = Object.values(this.truth.tasks).filter(
       (t) => t.businessId === biz && t.status !== 'ready' && t.status !== 'held',
     ).length;
@@ -479,6 +511,7 @@ export class DemoSim {
   }
 
   private ledgerCreationLoop() {
+    if (this.policies['aster-ledger']?.lifecycle && this.policies['aster-ledger']!.lifecycle !== 'running' || this.policies['hermes-hq']?.lifecycle === 'stopped') { this.after(30_000, () => this.ledgerCreationLoop()); return; }
     const open = Object.values(this.truth.tasks).filter((t) => t.businessId === 'aster-ledger' && !['ready', 'rejected', 'held'].includes(t.status)).length;
     if (open < 7) {
       this.emit('worker.state', { businessId: 'hermes-hq', workerId: 'armis.ceo' }, { state: 'active', departmentId: 'hermes-hq:leadership', action: 'Routing a new candidate to Aster Ledger' });
@@ -491,6 +524,7 @@ export class DemoSim {
   }
 
   private ledgerTickLoop() {
+    if (this.policies['aster-ledger']?.lifecycle === 'stopped') { this.after(15_000, () => this.ledgerTickLoop()); return; }
     this.ledger.tick(this.t);
     this.emitLedger();
     this.after(15_000, () => this.ledgerTickLoop());
@@ -582,6 +616,7 @@ export class DemoSim {
   }
 
   private pollLoop() {
+    if (this.policies['hermes-hq']?.lifecycle === 'stopped') { this.after(20_000, () => this.pollLoop()); return; }
     const echo = 'armis.operations';
     this.emit('worker.state', { businessId: 'hermes-hq', workerId: echo }, {
       state: 'active',
@@ -607,18 +642,27 @@ export class DemoSim {
   }
 
   private assignLoop(biz: string) {
+    const policy = this.policies[biz];
+    if (policy && (policy.lifecycle !== 'running' || policy.weight === 0 || policy.maxConcurrent === 0)) { this.after(2000, () => this.assignLoop(biz)); return; }
     for (const stage of TRADING_BUSINESSES.has(biz) ? LEDGER_STAGES : WORK_STAGES) {
       const tasks = Object.values(this.truth.tasks)
         .filter((t) => t.businessId === biz && t.stage === stage && (t.status === 'queued' || (t.status === 'waiting_provider' && !t.assignedWorkerId)))
         .sort((a, b) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1));
       for (const task of tasks) {
-        const capId = task.eligibleCapacity.find((c) => this.usable(c));
+        if (policy && this.t < (this.nextAdmission[biz] ?? 0)) break;
+        if ([...this.runs.values()].filter((r) => r.businessId === biz).length >= (policy?.maxConcurrent ?? 3)) break;
+        const usage = this.companyUsage(biz);
+        if (policy && (policy.tokenLimit != null && usage.consumedTokens >= policy.tokenLimit || policy.requestLimit != null && usage.consumedRequests >= policy.requestLimit)) {
+          this.emit('task.status', { businessId: biz, taskId: task.id }, { status: 'held', reason: 'Owner usage bound exhausted (simulated)' });
+          continue;
+        }
+        const capId = task.eligibleCapacity.find((c) => this.usable(c) && (!policy?.allowedProviders || policy.allowedProviders.includes(this.caps[c]!.provider)));
         if (!capId) {
           if (task.status !== 'waiting_provider') {
             const names = task.eligibleCapacity.map((c) => this.caps[c]?.provider ?? c).join(' / ');
             this.emit('task.status', { businessId: biz, taskId: task.id }, {
               status: 'waiting_provider',
-              reason: `No eligible capacity (${names} unavailable)`,
+              reason: policy?.allowedProviders && !task.eligibleCapacity.some((c) => policy.allowedProviders!.includes(this.caps[c]?.provider ?? '')) ? 'Owner policy permits no eligible provider route' : `No eligible capacity (${names} unavailable)`,
             });
           }
           continue;
@@ -635,6 +679,7 @@ export class DemoSim {
         );
         if (!worker) continue;
         this.startAttempt(task, worker.id, capId);
+        if (policy) this.nextAdmission[biz] = this.t + Math.round(50_000 / Math.max(1, policy.weight));
       }
     }
     this.after(2000, () => this.assignLoop(biz));
@@ -687,11 +732,13 @@ export class DemoSim {
   }
 
   private step(run: Run) {
+    if (!this.runs.has(run.attemptId)) return;
     const task = this.truth.tasks[run.taskId];
     if (!task) return;
-    if (!this.usable(run.capId)) {
+    const policy = this.policies[run.businessId];
+    if (!this.usable(run.capId) || policy?.allowedProviders && !policy.allowedProviders.includes(this.caps[run.capId]!.provider)) {
       const tpl = this.templates.get(run.taskId);
-      const alt = (tpl?.eligible ?? []).find((c) => c !== run.capId && this.usable(c));
+      const alt = (tpl?.eligible ?? []).find((c) => c !== run.capId && this.usable(c) && (!policy?.allowedProviders || policy.allowedProviders.includes(this.caps[c]!.provider)));
       if (alt) {
         run.capId = alt;
         this.emit('worker.state', this.ids(run), {
@@ -706,9 +753,9 @@ export class DemoSim {
           this.emit('worker.state', this.ids(run), {
             state: 'waiting_provider',
             departmentId: departmentForStage(run.businessId, run.stage),
-            action: `Waiting for ${this.caps[run.capId]!.provider} capacity`,
+            action: policy?.allowedProviders && !policy.allowedProviders.includes(this.caps[run.capId]!.provider) ? 'Owner policy blocks the provider route' : `Waiting for ${this.caps[run.capId]!.provider} capacity`,
           });
-          this.emit('task.status', this.ids(run), { status: 'waiting_provider', reason: `${this.caps[run.capId]!.provider} unavailable` });
+          this.emit('task.status', this.ids(run), { status: 'waiting_provider', reason: policy?.allowedProviders && !policy.allowedProviders.includes(this.caps[run.capId]!.provider) ? 'Owner policy blocks the provider route' : `${this.caps[run.capId]!.provider} unavailable` });
         }
         this.after(3000, () => this.step(run));
         return;
@@ -720,8 +767,19 @@ export class DemoSim {
       this.emit('task.status', this.ids(run), { status: 'in_progress' });
     }
     const cap = this.caps[run.capId]!;
+    const tokens = this.rng.int(900, 3200);
+    const usage = this.companyUsage(run.businessId);
+    if (policy && (policy.tokenLimit != null && usage.consumedTokens + tokens > policy.tokenLimit || policy.requestLimit != null && usage.consumedRequests + 1 > policy.requestLimit)) {
+      this.emit('attempt.finished', this.ids(run), { outcome: 'aborted' });
+      this.emit('task.status', this.ids(run), { status: 'held', reason: 'Owner usage bound exhausted (simulated)' });
+      this.release(run, 0);
+      return;
+    }
+    this.usage[run.businessId] = { consumedTokens: usage.consumedTokens + tokens, consumedRequests: usage.consumedRequests + 1 };
     cap.requests += 1;
-    cap.tokens += this.rng.int(900, 3200);
+    if (cap.remaining !== null) cap.remaining = Math.max(0, cap.remaining - 1);
+    if (cap.remaining === 0) { cap.availability = 'unavailable'; cap.availabilityNote = 'Simulated request allowance exhausted'; }
+    cap.tokens += tokens;
     if (TRADING_BUSINESSES.has(run.businessId)) this.ledger.addOperatingCost(0.004);
 
     const actions = ACTIONS[run.stage] ?? [['Working', 'tool']];
@@ -754,6 +812,7 @@ export class DemoSim {
   }
 
   private fail(run: Run) {
+    if (!this.runs.has(run.attemptId)) return;
     const ids = this.ids(run);
     this.emit('worker.state', ids, {
       state: 'failed',
@@ -764,6 +823,7 @@ export class DemoSim {
     this.emit('task.status', ids, { status: 'failed', reason: 'Attempt failed: build tool error (simulated). Will retry.' });
     this.runs.delete(run.attemptId);
     this.after(14_000, () => {
+      if (this.policies[run.businessId]?.lifecycle === 'stopped') return;
       this.busy.delete(run.workerId);
       this.emit('worker.state', { businessId: run.businessId, workerId: run.workerId }, { state: 'idle', departmentId: loungeOf(run.businessId) });
       this.emit('task.status', { businessId: run.businessId, taskId: run.taskId }, { status: 'queued' });
@@ -787,6 +847,7 @@ export class DemoSim {
   }
 
   private finish(run: Run) {
+    if (!this.runs.has(run.attemptId)) return;
     const task = this.truth.tasks[run.taskId];
     if (!task) return;
     if (TRADING_BUSINESSES.has(run.businessId)) return this.finishLedger(run);

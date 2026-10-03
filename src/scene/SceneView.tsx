@@ -1,3 +1,4 @@
+import { CAMPUS_FIT } from './powerLayout';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { BUSINESS_BY_ID, BUSINESSES, DEPARTMENT_BY_ID } from '../core/config';
 import { stageLabel, stateLabel } from '../core/reducer';
@@ -8,11 +9,18 @@ import { motionEnabled, store, ui, useUi, useWorkshop } from '../ui/store';
 import { ActorSystem } from './actors';
 import { buildCampus, type CampusScene, type Pt, pointInPoly, type SceneAssets } from './campus';
 import { Camera } from './camera';
+import { prepareSceneContext } from './renderQuality';
+import { coreReactors } from './coreArchitecture';
+import { floorTransform } from './cutaway';
+import { drawPowerStation, drawBuildingCharge, POWER_STATION } from './powerStation';
+import { v2 } from '../ui/v2Store';
+import { effectivePowerPolicies } from '../core/powerVisuals';
 import { placeLabels } from './labels';
 import { buildInterior, type InteriorScene } from './interior';
-import { DOT_STYLE, drawDots, drawGuide, type PlacedDot } from './traffic';
+import { DOT_STYLE, drawDots, type PlacedDot } from './traffic';
 import { CapacityChip } from '../ui/CapacityPanel';
 import { buildingSignals, drawBuildingSignals, drawDelegations } from './operations';
+import './v2Scene.css';
 
 function loadImage(src: string): Promise<HTMLImageElement | undefined> {
   return new Promise((resolve) => {
@@ -42,35 +50,11 @@ function interiorOf(sc: Scenes, id: string): InteriorScene {
 }
 
 function cameraFor(sc: Scenes, key: string): Camera {
-  let c = sc.cameras.get(key);
-  if (!c) {
-    if (key === 'campus') c = new Camera(sc.campus.width, sc.campus.height, { x0: 262, y0: 150, x1: 852, y1: 668 }, 0.7, 4);
-    else {
-      const s = interiorOf(sc, key);
-      c = new Camera(s.width, s.height, { x0: 70, y0: 24, x1: 664, y1: 392 }, 0.7, 4);
-    }
-    sc.cameras.set(key, c);
-  }
+  let c = sc.cameras.get('world');
+  if (!c) { c = new Camera(sc.campus.width, sc.campus.height, CAMPUS_FIT, 0.7, 5); sc.cameras.set('world',c); }
+  c.fitRect = key === 'campus' ? CAMPUS_FIT : floorTransform(key).bounds;
   return c;
 }
-
-const LEDGER_GUIDES: [string, string, string][] = [
-  ['feeds', 'research', '#1fb8d6'],
-  ['research', 'rules', '#1fb8d6'],
-  ['rules', 'audit', '#1fb8d6'],
-  ['audit', 'portfolio', '#1fb8d6'],
-  ['portfolio', 'exit', '#2fbf73'],
-  ['rules', 'reject', '#d04848'],
-  ['audit', 'reject', '#d04848'],
-  ['portfolio', 'reject', '#d04848'],
-];
-
-const ROUTE_GUIDES: [string, string, string][] = [
-  ['research', 'creation', '#1fb8d6'],
-  ['creation', 'audit', '#1fb8d6'],
-  ['audit', 'fixes', '#a35fe0'],
-  ['fixes', 'audit', '#a35fe0'],
-];
 
 export function SceneView() {
   const view = useUi((s) => s.view);
@@ -84,7 +68,8 @@ export function SceneView() {
   const scenesRef = useRef<Scenes | null>(null);
   const [ready, setReady] = useState(false);
   const [hover, setHover] = useState<{ kind: 'worker' | 'building' | 'dot' | 'room' | 'job'; id: string } | null>(null);
-  const [fading, setFading] = useState(false);
+  const fading = false;
+  const previousView = useRef('campus');
   const hoverRef = useRef(hover);
   hoverRef.current = hover;
   const placedRef = useRef<PlacedDot[]>([]);
@@ -109,13 +94,6 @@ export function SceneView() {
     };
   }, []);
 
-  // fade on view change
-  useEffect(() => {
-    setFading(true);
-    const t = setTimeout(() => setFading(false), 30);
-    return () => clearTimeout(t);
-  }, [viewKey]);
-
   // A simulated position is never a last-known live observation.
   useEffect(() => {
     const sc = scenesRef.current;
@@ -132,9 +110,12 @@ export function SceneView() {
     const canvas = canvasRef.current!;
     const wrap = wrapRef.current!;
     const ctx = canvas.getContext('2d')!;
+    prepareSceneContext(ctx);
     let raf = 0;
     let last = 0;
     let frame = 0;
+    const existing = sc.cameras.get('world');
+    const previousCamera = existing ? [existing.cx, existing.cy, existing.scale] as [number, number, number] : null;
     const cam = cameraFor(sc, viewKey);
     const resize = () => {
       const r = wrap.getBoundingClientRect();
@@ -146,6 +127,14 @@ export function SceneView() {
       cam.resize(r.width, r.height, (wrap.parentElement?.querySelector<HTMLElement>('.stage__bottom')?.offsetHeight ?? 60) + 18);
     };
     resize();
+    const began = performance.now();
+    if (previousView.current !== viewKey) {
+      if (previousCamera) [cam.cx,cam.cy,cam.scale] = previousCamera;
+      cam.reset(motionEnabled(), began);
+    }
+    previousView.current = viewKey;
+    const floor = viewKey === 'campus' ? null : floorTransform(viewKey);
+    const worldPoint = (p: Pt): Pt => floor ? floor.point(p) : p;
     const ro = new ResizeObserver(resize);
     ro.observe(wrap);
     let lastSelected: string | null = null;
@@ -157,23 +146,24 @@ export function SceneView() {
       const motion = motionEnabled();
       Camera.instant = !motion;
       document.documentElement.dataset.motion = motion ? "full" : "reduced";
-      // ~30 fps is plenty for pixel art and kind to an old Mac mini
+      // Dynamic layers remain capped near 30 fps; static high-resolution textures are cached
       if (now - last < 32 && !cam.animating) return;
       last = now;
       frame++;
+      wrap.dataset.cutawayProgress = viewKey === 'campus' ? '0' : String(motion ? Math.min(1,(now-began)/700) : 1);
       const s = store.get();
       const u = ui.get();
       const t = store.adapter?.clock() ?? s.now;
       cam.update(now);
       const dpr = canvas.width / Math.max(1, cam.viewW);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = '#05070d';
+      ctx.fillStyle = '#0f2340';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       const k = cam.scale * dpr;
       const tx = Math.round((cam.viewW / 2 - cam.cx * cam.scale) * dpr);
       const ty = Math.round((cam.viewH / 2 - cam.cy * cam.scale) * dpr);
       ctx.setTransform(k, 0, 0, k, tx, ty);
-      ctx.imageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = true;
       const selId = u.selection?.kind === 'worker' ? u.selection.id : null;
       const selDot = u.selection?.kind === 'dot' ? u.selection.dot.id : null;
       const hv = hoverRef.current;
@@ -181,7 +171,7 @@ export function SceneView() {
 
       if (viewKey === 'campus') {
         const campus = sc.campus;
-        ctx.drawImage(campus.base, 0, 0);
+        campus.draw(ctx,undefined,0,g=>{drawPowerStation(g,s,effectivePowerPolicies(v2.get()),now,motion);drawBuildingCharge(g,s,effectivePowerPolicies(v2.get()),now,motion);});
         campus.drawAmbient(ctx, now, motion, u.prefs.taskFlow);
         for(const b of campus.buildings) drawBuildingSignals(ctx,b.door,s,b.id);
         // hover / selection outline on buildings
@@ -204,13 +194,12 @@ export function SceneView() {
       } else {
         const interior = interiorOf(sc, viewKey);
         const actors = sc.actors.get(viewKey)!;
+        sc.campus.draw(ctx, viewKey, 0,g=>{drawPowerStation(g,s,effectivePowerPolicies(v2.get()),now,motion);drawBuildingCharge(g,s,effectivePowerPolicies(v2.get()),now,motion);});
+        sc.campus.drawAmbient(ctx, now, motion, false);
+        ctx.save();
+        ctx.transform(...floor!.matrix);
         ctx.drawImage(interior.base, 0, 0);
         interior.drawAmbient(ctx, t, motion);
-        if (u.prefs.taskFlow && BUSINESS_BY_ID[viewKey]?.kind === 'business') {
-          const ep = (k: string) => (k === 'exit' || k === 'reject' ? k : `${viewKey}:${k}`);
-          const guides = viewKey === 'aster-ledger' ? LEDGER_GUIDES : [...ROUTE_GUIDES, ['audit', 'exit', '#2fbf73'] as [string, string, string]];
-          for (const [a, b, c] of guides) drawGuide(ctx, interior.route(ep(a), ep(b)).map((p) => interior.toScreen(p, 0.5)), c, now, motion);
-        }
         actors.update(s, t, motion);
         actors.drawMonitors(ctx, now, motion);
         actors.drawJobs(ctx,s,u.selection?.kind === 'task' ? u.selection.id : null);
@@ -226,15 +215,23 @@ export function SceneView() {
         // one-time ease to a newly selected worker; continuous when following
         if (selId && selId !== lastSelected) {
           const p = actors.screenOf(selId);
-          if (p) cam.animateTo(p[0], p[1] - 12, Math.max(cam.scale, cam.fitScale * 1.6), 450, now);
+          if (p) { const q = worldPoint(p); cam.animateTo(q[0], q[1] - 5, Math.max(cam.scale, cam.fitScale * 1.6), 450, now); }
         }
         if (selId && u.follow && !cam.animating) {
           const p = actors.screenOf(selId);
           if (p) {
-            cam.cx += (p[0] - cam.cx) * (motion ? 0.08 : 1);
-            cam.cy += (p[1] - 12 - cam.cy) * (motion ? 0.08 : 1);
+            const q = worldPoint(p);
+            cam.cx += (q[0] - cam.cx) * (motion ? 0.08 : 1);
+            cam.cy += (q[1] - 5 - cam.cy) * (motion ? 0.08 : 1);
           }
         }
+      }
+      if (floor) {
+        // Draw traffic in the same first-floor transform, then restore world coordinates.
+        placedRef.current = drawDots(ctx, dots, t, motion, selDot).map(p => ({...p, at:worldPoint(p.at)}));
+        ctx.restore();
+        const reveal = motion ? Math.min(1,(now-began)/700) : 1;
+        if(reveal < 1) sc.campus.drawShell(ctx,viewKey,1-reveal);
       }
       lastSelected = selId;
       // Lights out when every AI provider scope is reported unavailable.
@@ -245,9 +242,9 @@ export function SceneView() {
       if (dark > 0) {
         const flicker = motion && dark < 0.6 && Math.sin(now / 37) > 0.4 ? 0.25 : 0;
         ctx.fillStyle = `rgba(2, 4, 10, ${Math.max(0, 0.72 * dark - flicker)})`;
-        ctx.fillRect(0, 0, viewKey === 'campus' ? sc.campus.width : interiorOf(sc, viewKey).width, viewKey === 'campus' ? sc.campus.height : interiorOf(sc, viewKey).height);
+        ctx.fillRect(0, 0, sc.campus.width, sc.campus.height);
       }
-      placedRef.current = drawDots(ctx, dots, t, motion, selDot);
+      if (!floor) placedRef.current = drawDots(ctx, dots, t, motion, selDot);
       const retained = new Set(s.traffic.map((dot) => dot.id));
       for (const id of lastDotPos.current.keys()) if (!retained.has(id)) lastDotPos.current.delete(id);
       for (const p of placedRef.current) lastDotPos.current.set(p.dot.id, p.at);
@@ -260,11 +257,19 @@ export function SceneView() {
         const bounds = { x: 12, y: 18, width: Math.max(1, cam.viewW - 24), height: Math.max(1, cam.viewH - bottom - 36) };
         ov.dataset.compact = cam.percent < 90 || cam.viewW < 1000 ? 'true' : 'false';
         const obstacles = u.prefs.minimap && cam.viewW > 900 ? [{ x: 12, y: cam.viewH - 188, width: 180, height: 124 }] : [];
-        const placements = placeLabels(elements.map((el, i) => {
-          const [x, y] = cam.toScreen(Number(el.dataset.ax), Number(el.dataset.ay));
+        const chat = wrap.parentElement?.querySelector<HTMLElement>('.hermes-chat');
+        if(chat) {
+          const cr=chat.getBoundingClientRect(), wr=wrap.getBoundingClientRect();
+          obstacles.push({x:cr.left-wr.left-8,y:cr.top-wr.top-8,width:cr.width+16,height:cr.height+16});
+        }
+        const requests = elements.map((el, i) => {
+          const anchor = worldPoint([Number(el.dataset.ax), Number(el.dataset.ay)]);
+          const [x, y] = cam.toScreen(...anchor);
           const child = el.firstElementChild as HTMLElement;
           return { id: String(i), x, y, width: child.offsetWidth, height: child.offsetHeight };
-        }), bounds, obstacles);
+        }).filter(label => viewKey !== 'campus' || cam.percent <= 110 ||
+          (label.x >= bounds.x && label.x <= bounds.x+bounds.width && label.y >= bounds.y && label.y <= bounds.y+bounds.height));
+        const placements = placeLabels(requests, bounds, obstacles);
         elements.forEach((el, i) => {
           const r = placements.get(String(i));
           el.style.visibility = r ? 'visible' : 'hidden';
@@ -281,13 +286,13 @@ export function SceneView() {
             return;
           }
           el.style.visibility = 'visible';
-          const [x, y] = cam.toScreen(p[0], p[1]);
+          const [x, y] = cam.toScreen(...(kind === 'dot' ? p : worldPoint(p)));
           el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
         });
       }
       if (frame % 8 === 0) {
         if (u.zoomPercent !== cam.percent) ui.update({ zoomPercent: cam.percent });
-        drawMinimap(miniRef.current, viewKey === 'campus' ? sc.campus.base : interiorOf(sc, viewKey).base, cam);
+        drawMinimap(miniRef.current, sc.campus.base, cam, g=>sc.campus.draw(g,undefined,1,layer=>drawPowerStation(layer,s,effectivePowerPolicies(v2.get()),now,false)));
       }
     };
     raf = requestAnimationFrame(loop);
@@ -299,10 +304,13 @@ export function SceneView() {
       return [e.clientX - r.left, e.clientY - r.top];
     };
     const hitAt = (sp: Pt): { kind: 'worker' | 'building' | 'dot' | 'room' | 'job'; id: string } | null => {
-      const p = cam.toWorld(sp[0], sp[1]);
+      const world = cam.toWorld(sp[0], sp[1]);
+      const p = floor ? floor.inverse(world) : world;
       const tol = 7 / Math.max(1, cam.scale / 2);
-      for (const d of placedRef.current) if (Math.hypot(d.at[0] - p[0], d.at[1] - p[1]) < Math.max(5, tol)) return { kind: 'dot', id: d.dot.id };
+      for (const d of placedRef.current) if (Math.hypot(d.at[0] - world[0], d.at[1] - world[1]) < Math.max(5, tol)) return { kind: 'dot', id: d.dot.id };
       if (viewKey === 'campus') {
+        for(const reactor of coreReactors(store.get())) if(pointInPoly(p,reactor.hull)) return {kind:'building',id:`reactor:${reactor.id}`};
+        if(pointInPoly(p,POWER_STATION.hull)) return {kind:'building',id:'power-station'};
         for (const b of sc.campus.buildings) if (pointInPoly(p, b.hull)) return { kind: 'building', id: b.id };
         return null;
       }
@@ -361,22 +369,15 @@ export function SceneView() {
         const r = interiorOf(sc, viewKey).rooms.find((x) => x.departmentId === h.id);
         if (r) {
           const [x, y] = interiorOf(sc, viewKey).toScreen(r.center);
-          cam.animateTo(x, y - 14, cam.fitScale * 2, 400, performance.now());
+          const q=worldPoint([x,y]);
+          cam.animateTo(q[0], q[1] - 5, cam.fitScale * 2, 400, performance.now());
         }
       }
     };
     const enterBuilding = (id: string) => {
-      const b = sc.campus.buildings.find((x) => x.id === id);
-      if (b && motionEnabled()) {
-        cam.animateTo(b.focus[0], b.focus[1], cam.scale * 2.2, 320, performance.now());
-        setTimeout(() => {
-          sc.cameras.delete('campus'); // come back to the fitted campus view
-          ui.go({ mode: 'interior', businessId: id });
-        }, 300);
-      } else {
-        sc.cameras.delete('campus');
-        ui.go({ mode: 'interior', businessId: id });
-      }
+      if(id.startsWith('reactor:')) {ui.setPrefs({tab:'power'});requestAnimationFrame(()=>window.dispatchEvent(new CustomEvent('armis:reactor-select',{detail:id.slice(8)})));return;}
+      if(id==='power-station') { ui.setPrefs({tab:'power'}); cam.animateTo(POWER_STATION.focus[0],POWER_STATION.focus[1],Math.min(cam.fitScale*2.2,4),650,performance.now()); return; }
+      ui.go({ mode: 'interior', businessId: id });
     };
     (wrap as any).__enter = enterBuilding;
     const onWheel = (e: WheelEvent) => {
@@ -430,6 +431,13 @@ export function SceneView() {
       else if (d === 'out') cam.zoomBy(0.8, n);
       else cam.reset(true, n);
     };
+    const campusReset = () => {
+      ui.go({mode:'campus'});
+      cam.fitRect = CAMPUS_FIT;
+      cam.resize(cam.viewW,cam.viewH,(wrap.parentElement?.querySelector<HTMLElement>('.stage__bottom')?.offsetHeight ?? 60)+18);
+      cam.reset(motionEnabled(),performance.now());
+    };
+    window.addEventListener('armis:campus-reset', campusReset);
     window.addEventListener('armis:zoom', zoomHandler);
     const mini = miniRef.current;
     const onMini = (e: PointerEvent) => {
@@ -450,6 +458,7 @@ export function SceneView() {
       canvas.removeEventListener('pointerleave', onLeave);
       canvas.removeEventListener('wheel', onWheel);
       wrap.removeEventListener('keydown', onKey);
+      window.removeEventListener('armis:campus-reset', campusReset);
       window.removeEventListener('armis:zoom', zoomHandler);
       mini?.removeEventListener('pointerdown', onMini);
       mini?.removeEventListener('pointermove', onMini);
@@ -471,6 +480,8 @@ export function SceneView() {
   return (
     <div
       className={`scene ${fading ? 'scene--fade' : ''}`}
+      data-world-view="campus"
+      data-cutaway-business={viewKey === 'campus' ? '' : viewKey}
       ref={wrapRef}
       tabIndex={0}
       role="application"
@@ -483,12 +494,14 @@ export function SceneView() {
       }}
     >
       <canvas ref={canvasRef} className="scene__canvas" aria-hidden="true" />
+      {view.mode==='interior' ? <div className="floor-caption"><span>FLOOR 01</span><strong>{BUSINESS_BY_ID[viewKey]?.brand.displayName}</strong><button onClick={()=>ui.go({mode:'campus'})} aria-label="Close building cutaway">Close cutaway</button></div> : null}
       {!ready ? <div className="scene__loading">Drawing the campus...</div> : null}
       <div className="scene__overlay" ref={overlayRef}>
         {ready && sc && view.mode === 'campus' ? (
           <>
+            <div className="anchor" data-ax={POWER_STATION.label[0]} data-ay={POWER_STATION.label[1]}><button className="blabel" onClick={()=>enter('power-station')} aria-label="Open power station"><span className="blabel__title">POWER STATION</span><span className="blabel__counts">Providers / allocation / machine</span></button></div>
             {sc.campus.buildings.map((b) => (
-              <BuildingLabel key={b.id} id={b.id} anchor={b.label} extra={b.id === "hermes-hq" ? <CapacityChip /> : null} hovered={hover?.kind === 'building' && hover.id === b.id} onEnter={() => enter(b.id)} onHover={(on) => setHover(on ? { kind: 'building', id: b.id } : null)} />
+              <BuildingLabel key={b.id} id={b.id} anchor={b.label}  hovered={hover?.kind === 'building' && hover.id === b.id} onEnter={() => enter(b.id)} onHover={(on) => setHover(on ? { kind: 'building', id: b.id } : null)} />
             ))}
           </>
         ) : null}
@@ -524,12 +537,14 @@ export function SceneView() {
   );
 }
 
-function drawMinimap(c: HTMLCanvasElement | null, base: HTMLCanvasElement, cam: Camera) {
+function drawMinimap(c: HTMLCanvasElement | null, base: HTMLCanvasElement, cam: Camera, render?: (ctx:CanvasRenderingContext2D)=>void) {
   if (!c || c.hidden) return;
   const g = c.getContext('2d')!;
+  prepareSceneContext(g);
   g.imageSmoothingEnabled = true;
   g.clearRect(0, 0, c.width, c.height);
-  g.drawImage(base, 0, 0, c.width, c.height);
+  if(render) {g.save();g.scale(c.width/cam.worldW,c.height/cam.worldH);render(g);g.restore();}
+  else g.drawImage(base, 0, 0, c.width, c.height);
   const sx = c.width / cam.worldW;
   const sy = c.height / cam.worldH;
   const [x0, y0] = cam.toWorld(0, 0);

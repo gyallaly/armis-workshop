@@ -39,9 +39,9 @@ function countdown(now: number, at: number | null): string {
   return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}:${String(ss).padStart(2, '0')}`;
 }
 
-export function CapacityPanel() {
+export function CapacityPanel({capacityId}:{capacityId?:string}={}) {
   const state = useWorkshop((s) => s);
-  const caps = Object.values(state.capacity);
+  const caps = Object.values(state.capacity).filter(c=>!capacityId||c.id===capacityId);
   const demo = useUi(s => s.prefs.source === 'demo');
   return (
     <section className="cap" aria-labelledby="cap-h">
@@ -69,6 +69,7 @@ export function CapacityPanel() {
               </div>
               <AvailBadge m={c.availability as Measured<string>} />
             </header>
+            {c.quotaWindows?.map((q) => <div className="quota-window" key={q.id}><strong>{q.label}</strong>{q.total.value !== null && q.total.value > 0 && q.remaining.value !== null ? <><progress aria-label={`${c.provider} ${q.label} remaining`} value={q.remaining.value} max={q.total.value} /><span>{Math.round(q.remaining.value / q.total.value * 100)}% remaining · {q.remaining.value} / {q.total.value} {q.unit}</span></> : <span>Comparable total not reported · no percentage available</span>}<ProvTag p={q.total.provenance} /></div>)}
             <dl className="kv">
               <dt>Availability source</dt>
               <dd>

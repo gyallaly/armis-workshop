@@ -1,20 +1,18 @@
-/**
- * Pixel-art raster helpers for a 2:1 isometric projection.
- *
- * All drawing happens at "art pixel" resolution on offscreen canvases and is
- * upscaled with nearest-neighbour sampling, which is what gives the scene its
- * 32-bit-era look. Faces are rasterised column by column, so edges are crisp
- * stair-steps rather than anti-aliased polygons.
- */
+/** Smooth architectural helpers for a shared 2:1 isometric world. Cached
+ * textures use higher resolution while geometry remains in logical units. */
 
+import { prepareSceneContext, registerTexture, SCENE_TEXTURE_SCALE } from './renderQuality';
 export type Ctx = CanvasRenderingContext2D;
 
 export function makeCanvas(w: number, h: number, readback = false): { canvas: HTMLCanvasElement; ctx: Ctx } {
   const canvas = document.createElement('canvas');
-  canvas.width = Math.ceil(w);
-  canvas.height = Math.ceil(h);
+  const resolution=readback?1:SCENE_TEXTURE_SCALE;
+  canvas.width = Math.ceil(w*resolution);
+  canvas.height = Math.ceil(h*resolution);
   const ctx = canvas.getContext('2d', { willReadFrequently: readback })!;
-  ctx.imageSmoothingEnabled = false;
+  registerTexture(canvas,w,h);
+  prepareSceneContext(ctx);
+  ctx.scale(resolution,resolution);
   return { canvas, ctx };
 }
 
@@ -23,12 +21,14 @@ export class Iso {
   constructor(
     public ox: number,
     public oy: number,
+    public sx = 1,
+    public sy = 1,
   ) {}
   x(wx: number, wy: number): number {
-    return this.ox + wx - wy;
+    return this.ox + wx * this.sx - wy * this.sy;
   }
   y(wx: number, wy: number, z = 0): number {
-    return this.oy + (wx + wy) / 2 - z;
+    return this.oy + (wx * this.sx + wy * this.sy) / 2 - z;
   }
   p(wx: number, wy: number, z = 0): [number, number] {
     return [this.x(wx, wy), this.y(wx, wy, z)];
@@ -65,38 +65,25 @@ export function mix(a: string, b: string, t: number): string {
 
 export function px(ctx: Ctx, x: number, y: number, c: string, w = 1, h = 1) {
   ctx.fillStyle = c;
-  ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
+  ctx.fillRect(x, y, w, h);
 }
 
-/** Top face of world rect [x0,x1]x[y0,y1] at height z. */
-export function top(ctx: Ctx, iso: Iso, x0: number, y0: number, x1: number, y1: number, z: number, c: string) {
-  ctx.fillStyle = c;
-  for (let u = x0 - y1; u <= x1 - y0; u++) {
-    const wyMin = Math.max(y0, x0 - u);
-    const wyMax = Math.min(y1, x1 - u);
-    if (wyMax < wyMin) continue;
-    const t = Math.floor(iso.oy + u / 2 + wyMin - z);
-    const b = Math.floor(iso.oy + u / 2 + wyMax - z);
-    ctx.fillRect(iso.ox + u, t, 1, Math.max(1, b - t + 1));
-  }
+/** Anti-aliased architectural planes with directional material shading. */
+function face(ctx:Ctx, points:[number,number][], color:string, light=0) {
+ const ys=points.map(p=>p[1]);
+ const grad=ctx.createLinearGradient(0,Math.min(...ys),0,Math.max(...ys)+1);
+ grad.addColorStop(0,shade(color,1+light));grad.addColorStop(1,shade(color,.88));
+ ctx.fillStyle=grad;ctx.beginPath();
+ points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fill();
 }
-
-/** Face in plane wy = y (faces down-left), spanning wx in [x0, x1), z in [z0, z1). */
-export function left(ctx: Ctx, iso: Iso, y: number, x0: number, x1: number, z0: number, z1: number, c: string) {
-  ctx.fillStyle = c;
-  const h = z1 - z0;
-  for (let wx = x0; wx < x1; wx++) {
-    ctx.fillRect(iso.ox + wx - y, Math.floor(iso.oy + (wx + y) / 2 - z1), 1, h);
-  }
+export function top(ctx:Ctx,iso:Iso,x0:number,y0:number,x1:number,y1:number,z:number,c:string) {
+ face(ctx,[iso.p(x0,y0,z),iso.p(x1,y0,z),iso.p(x1,y1,z),iso.p(x0,y1,z)],c,.08);
 }
-
-/** Face in plane wx = x (faces down-right), spanning wy in [y0, y1], z in [z0, z1). */
-export function right(ctx: Ctx, iso: Iso, x: number, y0: number, y1: number, z0: number, z1: number, c: string) {
-  ctx.fillStyle = c;
-  const h = z1 - z0;
-  for (let wy = y0; wy <= y1; wy++) {
-    ctx.fillRect(iso.ox + x - wy, Math.floor(iso.oy + (x + wy) / 2 - z1), 1, h);
-  }
+export function left(ctx:Ctx,iso:Iso,y:number,x0:number,x1:number,z0:number,z1:number,c:string) {
+ face(ctx,[iso.p(x0,y,z1),iso.p(x1,y,z1),iso.p(x1,y,z0),iso.p(x0,y,z0)],c,.06);
+}
+export function right(ctx:Ctx,iso:Iso,x:number,y0:number,y1:number,z0:number,z1:number,c:string) {
+ face(ctx,[iso.p(x,y0,z1),iso.p(x,y1,z1),iso.p(x,y1,z0),iso.p(x,y0,z0)],c,.02);
 }
 
 export interface BoxColors {
@@ -192,16 +179,8 @@ export function textWidth(text: string, scale = 1): number {
 }
 
 /** Flat (screen-aligned) pixel text. */
-export function text(ctx: Ctx, str: string, x: number, y: number, c: string, scale = 1) {
-  ctx.fillStyle = c;
-  let cx = Math.floor(x);
-  for (const ch of str) {
-    const rows = glyph(ch);
-    rows.forEach((row, j) => {
-      for (let i = 0; i < row.length; i++) if (row[i] === '1') ctx.fillRect(cx + i * scale, Math.floor(y) + j * scale, scale, scale);
-    });
-    cx += (rows[0]!.length + 1) * scale;
-  }
+export function text(ctx:Ctx,str:string,x:number,y:number,c:string,scale=1) {
+ ctx.fillStyle=c;ctx.font='600 '+(7*scale)+'px "Manrope", sans-serif';ctx.textBaseline='top';ctx.fillText(str,x,y);
 }
 
 /** Calls fn(i, j) for every lit pixel of str, i along the text, j down from the top. */
@@ -218,21 +197,11 @@ function eachPixel(str: string, scale: number, fn: (i: number, j: number) => voi
 }
 
 /** Text on a left-facing wall (plane wy = y), from wx = x0 toward larger wx; v = top height. */
-export function leftText(ctx: Ctx, iso: Iso, y: number, x0: number, v: number, str: string, c: string, scale = 1) {
-  ctx.fillStyle = c;
-  eachPixel(str, scale, (i, j) => {
-    const wx = x0 + i;
-    ctx.fillRect(iso.ox + wx - y, Math.floor(iso.oy + (wx + y) / 2 - v) + j, 1, 1);
-  });
+export function leftText(ctx:Ctx,iso:Iso,y:number,x0:number,v:number,str:string,c:string,scale=1) {
+ const p=iso.p(x0,y,v);ctx.save();ctx.transform(1,.5,0,1,...p);text(ctx,str,0,0,c,scale);ctx.restore();
 }
-
-/** Text on a right-facing wall (plane wx = x), from wy = y0 toward smaller wy; v = top height. */
-export function rightText(ctx: Ctx, iso: Iso, x: number, y0: number, v: number, str: string, c: string, scale = 1) {
-  ctx.fillStyle = c;
-  eachPixel(str, scale, (i, j) => {
-    const wy = y0 - i;
-    ctx.fillRect(iso.ox + x - wy, Math.floor(iso.oy + (x + wy) / 2 - v) + j, 1, 1);
-  });
+export function rightText(ctx:Ctx,iso:Iso,x:number,y0:number,v:number,str:string,c:string,scale=1) {
+ const p=iso.p(x,y0,v);ctx.save();ctx.transform(1,-.5,0,1,...p);text(ctx,str,0,0,c,scale);ctx.restore();
 }
 
 // ------------------------------------------------------------------- glow

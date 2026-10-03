@@ -4,6 +4,8 @@ import type { Pt, SceneAssets } from './campus';
 import { box as rasterBox, type Ctx, glow, Iso, lcg, left, leftText, makeCanvas, mix, px, right, rightText, shade, stippleTop, textWidth, top } from './pixel';
 import { navigate, type Obstacle } from './navigation';
 import { bush, tree } from './sprites';
+import { textureSize } from './renderQuality';
+import { FLOOR_ORIGIN, floorPlanScale } from './cutaway';
 
 export interface Room {
   departmentId: string;
@@ -64,10 +66,11 @@ function box(...args: Parameters<typeof rasterBox>) {
   if (!solids || z1 <= 0) return;
   const sx = Math.floor(iso.x(x0, y1)) - 2;
   const sy = Math.floor(iso.y(x0, y0, z1)) - 2;
-  const width = Math.ceil(x1 - x0 + y1 - y0) + 5;
-  const height = Math.ceil((x1 - x0 + y1 - y0) / 2 + z1) + 5;
+  const span = (x1-x0)*iso.sx + (y1-y0)*iso.sy;
+  const width = Math.ceil(span) + 5;
+  const height = Math.ceil(span / 2 + z1) + 5;
   const layer = makeCanvas(width, height);
-  const shifted = new Iso(iso.ox - sx, iso.oy - sy);
+  const shifted = new Iso(iso.ox - sx, iso.oy - sy, iso.sx, iso.sy);
   layer.ctx.globalAlpha = ctx.globalAlpha;
   rasterBox(layer.ctx, shifted, x0, y0, x1, y1, z0, z1, args[8]);
   solids.push({ x0, y0, x1, y1, blocking: z0 <= 0, alpha: ctx.globalAlpha, canvas: layer.canvas, sx, sy });
@@ -99,9 +102,9 @@ function layoutFor(b: Business): RoomSpec[] {
 }
 
 export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
-  const W = 760;
-  const H = 500;
-  const iso = new Iso(300, 110);
+  const W = 900;
+  const H = 620;
+  const iso = new Iso(...FLOOR_ORIGIN, 1, floorPlanScale(b.id).depth);
   const { canvas, ctx } = makeCanvas(W, H);
   const lights: { x: number; y: number; c: string; r: number; a: number }[] = [];
   const isU = b.id === 'uditus';
@@ -110,80 +113,9 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
   const accent = b.brand.colors.accent;
   const rnd = lcg(b.id.length * 977 + 13);
 
-  // ------------------------------------------------------------ backdrop
-  const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#060a14');
-  sky.addColorStop(1, '#0c1424');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, H);
-  // distant towers
-  for (let i = 0; i < 26; i++) {
-    const x = rnd() * W;
-    const w = 14 + rnd() * 30;
-    const h = 40 + rnd() * 120;
-    ctx.fillStyle = mix('#0b1220', '#121b2e', rnd());
-    ctx.fillRect(Math.floor(x), Math.floor(170 - h), Math.floor(w), Math.floor(h + 400));
-    for (let y = 170 - h + 4; y < H; y += 6)
-      for (let xx = x + 2; xx < x + w - 2; xx += 4) if (rnd() < 0.12) px(ctx, xx, y, rnd() < 0.5 ? '#c98b3e' : '#7a5a2e', 2, 2);
-  }
-  // ground + trees around the building
-  top(ctx, iso, -260, -200, 640, 520, -44, '#0f1a14');
-  stippleTop(ctx, iso, -260, -200, 640, 520, -44, '#16261c', 0.05, 4);
-
-  // ------------------------------------------------- building shell (lower)
-  const X0 = -8;
-  const X1 = 368;
-  const Y0 = -8;
-  const Y1 = 240;
-  const shellWall = isU ? '#1a2840' : isHQ ? '#222839' : isL ? '#14292c' : '#2e2523';
-  box(ctx, iso, X0, Y0, X1, Y1, -44, 0, { top: '#2a2a33', left: shade(shellWall, 1.1), right: shade(shellWall, 0.8) });
-  // lower-floor windows
-  for (let z = -40; z < -6; z += 14) {
-    for (let u = X0 + 6; u < X1 - 8; u += 10) {
-      const lit = rnd() < 0.45;
-      left(ctx, iso, Y1, u, u + 6, z, z + 9, lit ? '#e9b45e' : '#142238');
-      if (lit) lights.push({ x: iso.x(u + 3, Y1), y: iso.y(u + 3, Y1, z + 4), c: '#ffb54d', r: 9, a: 0.25 });
-    }
-    for (let u = Y0 + 6; u < Y1 - 8; u += 10) {
-      const lit = rnd() < 0.4;
-      right(ctx, iso, X1, u, u + 5, z, z + 9, lit ? '#d9a052' : '#122035');
-    }
-  }
-  // brand on the exterior front-left wall
-  if (isU && assets.uditusMark && assets.uditusLockup) {
-    const mark = assets.uditusMark;
-    const lock = assets.uditusLockup;
-    const lw = 120;
-    const lh = Math.round((lw * lock.height) / lock.width);
-    const xs = 40;
-    const zTop = -10;
-    left(ctx, iso, Y1, xs - 6, xs + lw + 6, zTop - lh - 8, zTop + 4, b.brand.colors.primary);
-    left(ctx, iso, Y1, xs - 6, xs + lw + 6, zTop + 3, zTop + 4, b.brand.colors.accent);
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-    ctx.setTransform(1, 0.5, 0, 1, iso.ox + xs - Y1, iso.oy + (xs + Y1) / 2 - zTop);
-    ctx.drawImage(lock, 0, 0, lw, lh);
-    ctx.restore();
-    ctx.imageSmoothingEnabled = false;
-    lights.push({ x: iso.x(xs + lw / 2, Y1), y: iso.y(xs + lw / 2, Y1, zTop - lh / 2), c: '#8FB6D6', r: 60, a: 0.45 });
-    void mark;
-  } else {
-    const sign = b.brand.signText;
-    const tw = textWidth(sign, 3);
-    const xs = 30;
-    left(ctx, iso, Y1, xs - 6, xs + tw + 6, -32, -6, isHQ ? '#141828' : isL ? '#0a1a1c' : '#241a17');
-    leftText(ctx, iso, Y1, xs, -12, sign, isHQ ? '#f4f2ea' : isL ? '#f2d58a' : '#ffe2c2', 3);
-    if (isL) {
-      // prominent PAPER plate next to the sign
-      const px0 = xs + tw + 14;
-      left(ctx, iso, Y1, px0, px0 + 44, -30, -8, '#3a1020');
-      leftText(ctx, iso, Y1, px0 + 4, -14, 'PAPER', '#ff9ac8', 2);
-      // amber / cyan ticker strip along the exterior
-      for (let u = X0 + 2; u < X1 - 2; u += 2) left(ctx, iso, Y1, u, u + 1, -4, -2, (u >> 3) % 3 === 0 ? '#5fe3d0' : '#f2b84b');
-    }
-    lights.push({ x: iso.x(xs + tw / 2, Y1), y: iso.y(xs + tw / 2, Y1, -18), c: isHQ ? '#9fb8ff' : '#ffb070', r: 50, a: 0.4 });
-  }
+  // Grounded first floor, composited directly into its campus footprint.
+  const X0 = -8, X1 = 368, Y0 = -8, Y1 = 240;
+  box(ctx, iso, X0, Y0, X1, Y1, -4, 0, { top:'#24222b', left:'#455268', right:'#283749' });
 
   // ---------------------------------------------------------------- floor
   top(ctx, iso, X0, Y0, X1, Y1, 0, '#24222b');
@@ -197,6 +129,16 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
   const solids: Solid[] = [];
   solidsByContext.set(ctx, solids);
   const lounge: LoungeSpot[] = [];
+
+  // A continuous rear envelope spans the gaps between department bays.
+  // Partitions meet this wall instead of leaving unsupported notches.
+  for(let i=0;i<specs.length;i++) {
+    const current=specs[i]!,next=specs[i+1];
+    if(current.row===0&&next?.row===0&&next.x0>current.x1) {
+      const wall=isU?'#857058':isHQ?'#3a4058':isL?'#2b4549':'#6e5844';
+      box(ctx,iso,current.x1,-3,next.x0,0,0,WALL_H,{top:'#14161d',left:wall,right:shade(wall,.7)});
+    }
+  }
 
   for (const spec of specs) {
     const dept = b.departments.find((d) => d.kind === spec.kind)!;
@@ -216,13 +158,13 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
       top(ctx, iso, x0 + 3, y1 - 7, x1 - 3, y1 - 6, 0, '#ad996c');
     }
 
-    const back = spec.row === 0 ? WALL_H : LOW_H;
+    const back = WALL_H;
     const wallL = isU ? '#6a5643' : isHQ ? '#2f3448' : isL ? '#22383c' : '#5a4636';
     const wallR = isU ? '#857058' : isHQ ? '#3a4058' : isL ? '#2b4549' : '#6e5844';
     const glass = isL && spec.kind === 'audit';
     const cap = '#14161d';
     // back-right wall (plane wy = y0) and back-left wall (plane wx = x0)
-    const leftH = x0 === 0 ? back : spec.row === 0 ? PART_H : LOW_H;
+    const leftH = WALL_H;
     if (glass) {
       // glass audit room: tinted panes with bright mullions, taller than its neighbours
       const gh = PART_H;
@@ -254,9 +196,10 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
     // wainscot strip
     if (!glass) {
       if (spec.row === 0) left(ctx, iso, y0, x0, x1, 0, 6, shade(wallR, 0.75));
-      right(ctx, iso, x0, y0, y1, 0, 6, shade(wallL, 0.75));
+      const sideSegments:Pt[]=spec.row===0&&x0>0?[[y0,DOOR_Y0],[DOOR_Y1,y1]]:[[y0,y1]];
+      for(const [start,end] of sideSegments) right(ctx, iso, x0, start, end, 0, 6, shade(wallL, 0.75));
       if (spec.row === 0) left(ctx, iso, y0, x0, x1, 6, 7, shade(wallR, 1.15));
-      right(ctx, iso, x0, y0, y1, 6, 7, shade(wallL, 1.15));
+      for(const [start,end] of sideSegments) right(ctx, iso, x0, start, end, 6, 7, shade(wallL, 1.15));
     }
 
     // Responsibility screens, shelves and signage own the back wall.
@@ -307,41 +250,23 @@ export function buildInterior(b: Business, assets: SceneAssets): InteriorScene {
   const rejectPt: Pt = [366, CORR_Y1 - 8];
   right(ctx, iso, 360, CORR_Y0 + 2, CORR_Y0 + 16, 0, 26, '#0f1a10');
   right(ctx, iso, 360, CORR_Y0 + 4, CORR_Y0 + 14, 2, 24, '#1e3a24');
-  rightText(ctx, iso, 360, CORR_Y0 + 16, 31, isL ? 'PAPER' : 'READY', '#7dffb0', 1);
+  rightText(ctx, iso, 360, CORR_Y0 + 16, isL ? 43 : 31, isL ? 'PAPER' : 'READY', '#7dffb0', 1);
   lights.push({ x: iso.x(360, exit[1]), y: iso.y(360, exit[1], 14), c: '#3dff9a', r: 20, a: 0.4 });
   if (isL) {
     right(ctx, iso, 360, CORR_Y1 - 16, CORR_Y1 - 2, 0, 26, '#1a0c0c');
     right(ctx, iso, 360, CORR_Y1 - 14, CORR_Y1 - 4, 2, 24, '#3a1414');
-    rightText(ctx, iso, 360, CORR_Y1 - 1, 31, 'REJECT', '#ff8a8a', 1);
+    rightText(ctx, iso, 360, CORR_Y1 - 1, 17, 'REJECT', '#ff8a8a', 1);
     lights.push({ x: iso.x(360, rejectPt[1]), y: iso.y(360, rejectPt[1], 14), c: '#ff4a4a', r: 18, a: 0.35 });
-  }
-
-  // trees around the base (in front)
-  for (let i = 0; i < 18; i++) {
-    const x = -40 + rnd() * 460;
-    const y = 252 + rnd() * 40;
-    tree(ctx, iso.x(x, y), iso.y(x, y, -44), 8 + rnd() * 5, i * 31 + 7, rnd() < 0.2 ? 'pine' : 'round');
-  }
-  for (let i = 0; i < 10; i++) {
-    const y = -30 + rnd() * 280;
-    const x = 380 + rnd() * 40;
-    tree(ctx, iso.x(x, y), iso.y(x, y, -44), 8 + rnd() * 5, i * 17 + 3, 'round');
   }
 
   // warm pools on the floor under every desk, then a vignette toward the edges
   for (const r of rooms) for (const seat of r.seats) glow(ctx, iso.x(seat.at[0], seat.at[1] - 6), iso.y(seat.at[0], seat.at[1] - 6), '#ffbe64', 40, 0.28);
   for (const l of lights) glow(ctx, l.x, l.y, l.c, l.r, l.a);
-  const vg = ctx.createRadialGradient(W * 0.48, H * 0.45, H * 0.3, W * 0.48, H * 0.45, W * 0.62);
-  vg.addColorStop(0, 'rgba(0,0,0,0)');
-  vg.addColorStop(1, 'rgba(0,0,8,0.45)');
-  ctx.fillStyle = vg;
-  ctx.fillRect(0, 0, W, H);
-
   // Preserve the finished art inside each physical silhouette, including keyboard,
   // monitor frames and wall decorations, when repainting in front of a worker.
   for (const solid of solids) {
     if (solid.alpha < 1) continue;
-    const finished = makeCanvas(solid.canvas.width, solid.canvas.height);
+    const finished = makeCanvas(textureSize(solid.canvas).width, textureSize(solid.canvas).height);
     finished.ctx.drawImage(canvas, -solid.sx, -solid.sy);
     finished.ctx.globalCompositeOperation = 'destination-in';
     finished.ctx.drawImage(solid.canvas, 0, 0);
@@ -788,10 +713,57 @@ function identityEquipment(ctx: Ctx, iso: Iso, r: Room, b: Business) {
       box(ctx,iso,x1-34,y1-38,x1-22,y1-26,0,23,{top:'#5e7287',left:'#283d51',right:'#1b2d40'});
       for(let z=5;z<22;z+=5) left(ctx,iso,y1-26,x1-32,x1-24,z,z+2,'#8394a5');
     }
+    // Large readable service furniture grounds each command room's purpose.
+    if (kind === 'leadership') {
+      box(ctx,iso,x1-35,y0+62,x1-12,y0+72,0,9,{top:'#6b7787',left:'#34485c',right:'#26374a',rim:'#c5ae7b'});
+      top(ctx,iso,x1-32,y0+64,x1-15,y0+70,9,'#b9c2bf');
+      for(const dx of [0,8,16]) box(ctx,iso,x1-34+dx,y0+77,x1-30+dx,y0+82,0,5,{top:'#566879',left:'#304657',right:'#203746'});
+    } else if(kind==='finance') {
+      box(ctx,iso,x0+5,y0+12,x0+19,y0+33,0,24,{top:'#6c756e',left:'#394a49',right:'#283b3d',rim:'#a4a88e'});
+      for(let z=4;z<24;z+=5) right(ctx,iso,x0+19,y0+14,y0+31,z,z+1,'#bec0a1');
+    } else if(kind==='quality') {
+      box(ctx,iso,x0+6,y0+8,x0+18,y0+40,0,23,{top:'#697489',left:'#39475c',right:'#273b50',rim:'#96a5b8'});
+      for(let y=y0+10;y<y0+38;y+=6) right(ctx,iso,x0+18,y,y+4,4,20,'#b4a783');
+    } else if(kind==='operations') {
+      box(ctx,iso,x0+6,y0+7,x0+21,y0+40,0,24,{top:'#61788a',left:'#294359',right:'#203347',rim:'#9db2c0'});
+      for(let y=y0+10;y<y0+38;y+=7) right(ctx,iso,x0+21,y,y+5,5,21,'#53718b');
+    } else if(kind==='efficiency') {
+      box(ctx,iso,x0+6,y0+10,x0+18,y0+33,0,16,{top:'#799592',left:'#426262',right:'#2d4a4f',rim:'#b1c0ac'});
+      for(let y=y0+12;y<y0+30;y+=6) top(ctx,iso,x0+8,y,x0+16,y+4,16,'#c9bc8f');
+    }
     return;
   }
-  if (kind !== 'research' && kind !== 'delivery') return;
+  if(kind==='leadership') {
+    const wood=b.id==='uditus'?'#7d92a0':b.id==='etsy-studio'?'#b89065':'#688b87';
+    box(ctx,iso,x0+8,y0+63,x0+37,y0+77,0,10,{top:wood,left:shade(wood,.68),right:shade(wood,.55),rim:shade(wood,1.2)});
+    top(ctx,iso,x0+12,y0+66,x0+33,y0+74,10,b.id==='uditus'?'#acc6cb':b.id==='etsy-studio'?'#dec19e':'#b2c5b2');
+    for(const y of [y0+65,y0+72]) box(ctx,iso,x0+4,y,x0+7,y+5,0,6,{top:shade(wood,.8),left:shade(wood,.55),right:shade(wood,.45)});
+    box(ctx,iso,x1-21,y0+61,x1-10,y0+82,0,20,{top:wood,left:shade(wood,.65),right:shade(wood,.55)});
+    for(let z=5;z<20;z+=5) right(ctx,iso,x1-10,y0+63,y0+80,z,z+1,'#c0bea0');
+    return;
+  }
+  if (kind !== 'research'  && kind !== 'delivery') return;
   const x=x0+14, y=y1-32;
+  const bx=x1-27, by=y0+61;
+  const body=b.id==='uditus'?'#5f8298':b.id==='etsy-studio'?'#a47a52':'#537b79';
+  box(ctx,iso,bx,by,bx+15,by+20,0,12,{top:body,left:shade(body,.65),right:shade(body,.5),rim:shade(body,1.3)});
+  if(b.id==='uditus') {
+    // Prototype test bench: mounted display plus three physical device trays.
+    box(ctx,iso,bx+1,by+2,bx+14,by+4,12,28,{top:'#647e91',left:'#1a3448',right:'#263d50'});
+    left(ctx,iso,by+4,bx+3,bx+12,16,25,'#85b4be');
+    for(let k=0;k<3;k++) box(ctx,iso,bx+3,by+7+k*4,bx+11,by+10+k*4,12,14,{top:'#a8c0c6',left:'#547484',right:'#3b586b'});
+  } else if(b.id==='etsy-studio') {
+    // Material drawers and a grounded miniature product-photo sweep.
+    box(ctx,iso,bx+1,by+1,bx+14,by+3,12,25,{top:'#d2b48d',left:'#e0cba8',right:'#b8a17e'});
+    for(let k=0;k<3;k++) box(ctx,iso,bx+3,by+7+k*4,bx+8,by+10+k*4,12,17,{top:['#d8b874','#bf8878','#97b0a0'][k]!,left:'#947050',right:'#745135'});
+    for(let z=3;z<12;z+=4) left(ctx,iso,by+20,bx+2,bx+13,z,z+1,'#d6ba92');
+  } else {
+    // Research station: comparison atlas, instrument stand and sample trays.
+    box(ctx,iso,bx+2,by+2,bx+6,by+7,12,29,{top:'#cad0b0',left:'#668d89',right:'#3e625f'});
+    box(ctx,iso,bx+5,by+3,bx+12,by+6,24,29,{top:'#b6c6bb',left:'#608582',right:'#3c6061'});
+    top(ctx,iso,bx+2,by+11,bx+13,by+17,12,'#c1ccb6');
+    top(ctx,iso,bx+7,by+11,bx+8,by+17,12,'#64888c');
+  }
   if (b.id === 'uditus') {
     // Product studio: prototype devices, wireframe board and component tray.
     plinth(x,y,36,'#657784');

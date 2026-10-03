@@ -225,7 +225,10 @@ export class ActorSystem {
       if (a.id === selected) glow(ctx, sx, sy - 10, '#3ee6ff', 20, 0.6);
       // soft shadow
       px(ctx, sx - 6, sy - 1, 'rgba(0,0,0,0.35)', 12, 2);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(spr, x, y, CHAR_W * S, CHAR_H * S);
+      ctx.restore();
       ctx.save();
       ctx.beginPath(); ctx.rect(x, y, CHAR_W * S, CHAR_H * S); ctx.clip();
       this.scene.drawOccluders(ctx, a.pos);

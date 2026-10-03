@@ -20,7 +20,7 @@ export interface Prefs {
   motion: 'system' | 'full' | 'reduced';
   taskFlow: boolean;
   minimap: boolean;
-  tab: 'activity' | 'tasks' | 'capacity' | 'connections';
+  tab: 'activity' | 'tasks' | 'capacity' | 'connections' | 'power' | 'guide';
 }
 
 const DEFAULT_PREFS: Prefs = { source: 'demo', scenario: 'steady', speed: 1, motion: 'system', taskFlow: true, minimap: true, tab: 'activity' };
@@ -67,6 +67,7 @@ export type Selection =
   | { kind: 'task'; id: string }
   | { kind: 'dot'; dot: TrafficDot }
   | { kind: 'building'; id: string }
+  | { kind: 'power'; id?: string }
   | null;
 
 export interface UiState {

@@ -91,7 +91,7 @@ test('capacity: codex out until reset, gemini remaining not reported, shared sco
   await expect(codex.getByText(/^in /)).toBeVisible();
   await expect(codex.getByText('Provider reported').first()).toBeVisible();
   const gem = panel(page).getByRole('article', { name: 'Gemini capacity' });
-  await expect(gem.getByText('Not reported')).toBeVisible();
+  await expect(gem.getByText('Not reported', { exact: true })).toBeVisible();
   await expect(gem.getByText('Locally measured').first()).toBeVisible();
   await expect(panel(page).getByText(/never split into per-worker allowances/)).toBeVisible();
 });

@@ -4,7 +4,9 @@ import { DemoBar, Legend, SceneToolbar, TopBar } from './Chrome';
 import { EvidenceDialog, NewsDrawer, RedirectDialog } from './Dialogs';
 import { SidePanel } from './SidePanel';
 import { capacityOut } from '../core/selectors';
-import { store, ui, useWorkshop } from './store';
+import { store, ui, useWorkshop, useUi } from './store';
+import { v2 } from './v2Store';
+import { HermesChat } from './V2Panels';
 
 function LightsOutBanner() {
   const out = useWorkshop(capacityOut);
@@ -31,10 +33,12 @@ function StaleBanner() {
 }
 
 export function App() {
+  const source = useUi((s) => s.prefs.source);
   useEffect(() => {
     store.start(ui.get().prefs.source, ui.get().prefs);
     return () => store.adapter?.stop();
   }, []);
+  useEffect(() => { v2.reset(source); void v2.refresh(); const timer = setInterval(() => void v2.refresh(), 5000); return () => clearInterval(timer); }, [source]);
   return (
     <div className="app">
       <a className="skip" href="#panel-body">
@@ -47,6 +51,7 @@ export function App() {
           <SceneView />
           <StaleBanner />
           <LightsOutBanner />
+          <HermesChat />
           <div className="stage__bottom">
             <SceneToolbar />
             <Legend />

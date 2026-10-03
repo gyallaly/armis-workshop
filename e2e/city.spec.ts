@@ -41,8 +41,14 @@ for (const width of [1280, 1440]) test(`all city labels remain separated inside 
       if (zoom !== 'fit') for (let i = 0; i < (zoom === 'min' ? 3 : 8); i++) await page.getByRole('button', { name: zoom === 'min' ? 'Zoom out' : 'Zoom in', exact: true }).click();
       await expect.poll(async () => page.locator('.scene').evaluate((scene) => {
         const bounds = scene.getBoundingClientRect();
-        const labels = Array.from(scene.querySelectorAll<HTMLElement>('[data-ax]'));
-        if (labels.some((el) => getComputedStyle(el).visibility !== 'visible')) return false;
+        const anchors = Array.from(scene.querySelectorAll<HTMLElement>('[data-ax]'));
+        const labels=anchors.filter(el=>getComputedStyle(el).visibility==='visible');
+        // At campus close zoom, offscreen anchors must disappear instead of floating
+        // over unrelated buildings. At fit/min all identities remain visible.
+        const zoom = Number(scene.closest('.stage')?.querySelector('.zoom')?.textContent?.match(/\d+/)?.[0]??100);
+        if(scene.getAttribute('data-cutaway-business')!==''||zoom<=110) {
+          if(labels.length!==anchors.length)return false;
+        }
         const rects = labels.map((el) => el.firstElementChild!.getBoundingClientRect());
         return rects.every((r, i) => r.left >= bounds.left && r.top >= bounds.top && r.right <= bounds.right && r.bottom <= bounds.bottom && rects.slice(i + 1).every((b) => r.right <= b.left || r.left >= b.right || r.bottom <= b.top || r.top >= b.bottom));
       }), { message: `${business} labels at ${zoom} zoom` }).toBe(true);

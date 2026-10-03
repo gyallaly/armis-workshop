@@ -4,10 +4,10 @@
 
 - **TypeScript + React 19 + Vite 8**: a small, maintained, fast-building component UI. All dependencies are pinned exactly in `package.json`.
 - **Canvas 2D for the scene**: there is no WebGL engine.
-  - The art is drawn once, at "art-pixel" resolution, into offscreen canvases. Each frame upscales those with nearest-neighbour sampling and draws only the animated layers on top: workers, dots, water, tickers.
+  - Static architecture is drawn into offscreen textures at three times logical scene resolution. `renderQuality` records logical dimensions and normalizes default texture draws so higher resolution cannot change geometry. Architectural surfaces use anti-aliased polygons, directional gradients and smooth sampling. Characters and vegetation use smooth geometry. Dynamic layers retain the same world coordinates.
   - This is cheap enough for an Intel Mac mini with 8 GB RAM and no GPU-heavy effects.
   - Frame rate is capped near 30 fps, and hidden tabs pause rendering. The demo stream also slows to one step per second while the tab is hidden.
-- **Interface text is DOM**: labels, panels and dialogs are sharp, accessible HTML positioned over the canvas. Only in-scene signage is pixelated.
+- **Interface text is DOM**: labels, panels and dialogs are sharp, accessible HTML positioned over the canvas. In-scene signage uses smooth canvas typography on architectural planes.
 - **Vitest** for the logic. **Playwright**, driving the system Edge, for browser interaction tests.
 
 ## Data flow
@@ -61,7 +61,7 @@
 
 ## City integrity
 
-Interior navigation uses the same geometry footprints as rendering. Visibility-graph routes pass through actual door openings and avoid furniture; workers receive unique seats. Depth layers restore foreground walls, desks and monitors over actors while preserving finished decoration. Campus pedestrians likewise respect static foreground objects. Labels are placed against viewport margins, the toolbar, minimap and other labels; camera fit reserves that space.
+Interior navigation uses the same geometry footprints as rendering. Visibility-graph routes pass through actual door openings and avoid furniture; workers receive unique seats. Depth layers restore foreground walls, desks and monitors over actors while preserving finished decoration. No decorative outdoor occupants are drawn. Labels avoid the toolbar, minimap and chat; offscreen campus anchors are culled at close zoom while fit preserves every building identity.
 
 `tests/navigation.test.ts`, `tests/labels.test.ts` and `tests/boundaries.test.ts` cover movement, label placement and state boundaries. `e2e/city.spec.ts` verifies all five views at fit/minimum/maximum zoom at 1280 and 1440 widths. The organization view shows declared Control roles separately from simulated sessions.
 
@@ -71,4 +71,14 @@ Interior navigation uses the same geometry footprints as rendering. Visibility-g
 
 `reconcileCity` checks declaration completeness, home ownership, observations, job/attempt associations and count totals. A failed worker can retain its completed attempt while the job is unassigned. Active workers must match current assignment. Organization panels expose these diagnostics.
 
-`LiveBridgeAdapter` consumes an explicitly configured sanitized SSE endpoint. Only a validated snapshot establishes a connection; reconnects require another snapshot before events are accepted. The adapter rejects unknown identities and cross-company observations, stamps arrival timestamps locally, and offers no control capability. Transport tests use simulated fixtures; actual Mac mini connectivity remains unverified until an endpoint is supplied.
+`LiveBridgeAdapter` consumes canonical SSE or the installed viewer's named journal snapshot/events/heartbeat stream, defaulting to same-origin `/api/events`. Only a validated snapshot establishes a connection; reconnects require another snapshot before events are accepted. Journal roles are bound explicitly and unmatched observations remain evidence, not invented characters. The observation adapter stays read-only. `v2Store` uses a separate authenticated owner command/chat contract, validates responses and fences async results across source changes. Installed Mini coverage remains unverified.
+
+## V2 spatial composition and power
+
+`campus.draw` caches the ground, buildings and foreground objects separately. `cutaway.floorTransform` maps the original physical first-floor layout into the exact campus footprint. Actors, furniture, labels, jobs, traffic and pointer hits share the transform and inverse. A single camera retains campus context; upper shells dissolve without a detached interior backdrop. Floor 01 is explicit; future floors must share the same building record.
+
+`powerStation` draws a grounded offshore utility island, supported conduit, provider bays and corridor branches below the building shells. Reactor fill requires fresh comparable quota windows; unknown totals have no fabricated percentage. Branch width is effective scheduling allocation, flow dots require confirmed activity, and perimeter lamps encode permitted capacity. Unverified or pending live policy cannot illuminate a building as supplied.
+
+`coreArchitecture` implements the selected circular Core design: shared concentric foundation, rails and deck, command hall, account reactors and a distribution nexus. Reactors use source-derived scope identities and have provider-specific pointer inspection. The power panel also provides keyboard-accessible reactor selection. Higher texture resolution increases cache memory; actual Mini performance remains to be measured on that hardware.
+
+`server/owner-policy.mjs` persists policy, reservations, usage, commands and conversations. Its supported executor must prove execution-path coverage and acquire admission before managed calls. Fixture tests prove service behavior, not installed Hermes coverage. See V2-RUNTIME-CONTRACT.md for authentication, attribution and deployment limits.
