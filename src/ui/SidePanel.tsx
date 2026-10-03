@@ -142,7 +142,7 @@ function Actions({ state, workerId, task }: { state: WorkshopState; workerId?: s
   const d = worker ? displayStatus(state, worker) : undefined;
   // Redirect only a fresh, observed worker that is actually on this task.
   const blocker = !store.adapter?.capabilities.redirect || live
-    ? 'Redirect is disabled: the live bridge is not connected.'
+    ? 'Read-only Live viewer: redirect and controls are disabled.'
     : state.connection === 'reconnecting'
       ? 'Redirect is paused while the stream reconnects.'
       : !task || !workerId
@@ -203,6 +203,7 @@ function WorkerDetail({ state, worker }: { state: WorkshopState; worker: Worker 
           {d.stale && d.reported ? <div className="small muted">Last reported: {stateLabel(d.reported)}</div> : null}
         </div>
       </header>
+      {worker.installation ? <p className="small muted">{worker.installation.installed === true ? 'Installed' : worker.installation.installed === false ? 'Not installed' : 'Installation unverified'} · {worker.installation.observed ? 'observed' : 'not observed'} · {worker.installation.roleBinding === 'unbound' ? 'Armis role unbound' : worker.installation.roleBinding === 'verified' ? 'role binding verified' : 'role binding unknown'}</p> : null}
       <dl className="kv">
         <dt>Provider</dt>
         <dd>
@@ -315,6 +316,7 @@ function TaskDetail({ state, task }: { state: WorkshopState; task: Task }) {
         <dd>{relTime(state.now, task.updatedAt)}</dd>
         <dt>Task id</dt>
         <dd className="mono small">{task.id}</dd>
+        {task.parentTaskId ? <><dt>Parent task</dt><dd><button className="link mono small" onClick={() => ui.select({kind:'task',id:task.parentTaskId!})}>{task.parentTaskId}</button></dd></> : null}
       </dl>
       {TRADING_BUSINESSES.has(task.businessId) ? <CandidateDetail businessId={task.businessId} taskId={task.id} /> : null}
       {task.status === 'ready' ? (
@@ -333,7 +335,7 @@ function TaskDetail({ state, task }: { state: WorkshopState; task: Task }) {
               <span>
                 {stageLabel(a.stage)} · {state.workers[a.workerId]?.name ?? a.workerId}
               </span>
-              <span className={a.outcome ? `out out--${a.outcome}` : 'muted'}>{a.outcome ?? (a.endedAt ? 'ended' : 'outcome not observed')}</span>
+              <span className={a.outcome ? `out out--${a.outcome}` : 'muted'}>{a.outcome ?? (a.endedAt ? 'ended · outcome not observed' : 'outcome not observed')}</span>
             </li>
           );
         })}
@@ -429,7 +431,7 @@ function Feed({ state }: { state: WorkshopState }) {
           {all ? 'Fewer' : 'All activity →'}
         </button>
       </h2>
-      {!entries.length ? <p className="empty">{state.connection === 'disconnected' ? 'Not connected: no events observed.' : 'Waiting for events...'}</p> : null}
+      {!entries.length ? <p className="empty">{biz && !roster.length && state.connection !== 'demo' ? 'No telemetry for this business.' : state.connection === 'disconnected' ? 'Not connected: no events observed.' : 'Waiting for events...'}</p> : null}
       <ol className="feed">
         {entries.map((e) => {
           const who = e.workerId ? state.workers[e.workerId] : undefined;
@@ -471,6 +473,7 @@ function TaskList({ state }: { state: WorkshopState }) {
           Business
           <select value={biz} onChange={(e) => setBiz(e.target.value)}>
             <option value="all">All</option>
+            <option value="hermes-hq">Armis Syndicate HQ</option>
             <option value="uditus">Uditus</option>
             <option value="etsy-studio">Etsy Studio</option>
             <option value="aster-ledger">Aster Ledger</option>

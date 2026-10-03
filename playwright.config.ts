@@ -1,8 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
-// Uses the system Microsoft Edge (always present on Windows 11) so no browser
-// binaries need to be downloaded. Set PW_CHANNEL=chrome or chromium elsewhere.
-const channel = process.env.PW_CHANNEL ?? 'msedge';
+// Supported Chromium by default. Ubuntu host verification uses PW_CHANNEL=chrome.
+const channel = process.env.PW_CHANNEL ?? 'chromium';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -17,7 +16,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   webServer: {
-    command: 'npm run preview',
+    command: 'npm run serve:live',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: true,
     timeout: 60_000,

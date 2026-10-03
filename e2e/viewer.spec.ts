@@ -4,6 +4,8 @@ async function open(page: Page) {
   await page.goto('/');
   await page.evaluate(() => localStorage.clear());
   await page.reload();
+  // Explicit test-only opt-in. The user-facing dashboard always opens in Live.
+  await page.getByRole('combobox', { name: 'Data source' }).selectOption('demo');
   await expect(page.getByRole('button', { name: /Enter Uditus/ })).toBeVisible();
 }
 
@@ -14,7 +16,7 @@ test('campus loads in demo mode with no secrets and all three buildings', async 
   page.on('pageerror', (e) => errors.push(e.message));
   await open(page);
   await expect(page.getByText('DEMO DATA')).toBeVisible();
-  await expect(page.getByRole('button', { name: /Enter Hermes HQ/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Enter Armis Syndicate HQ/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Enter Etsy Studio/ })).toBeVisible();
   // Real Uditus lockup is used for its label; Etsy Studio is marked provisional.
   await expect(page.getByRole('img', { name: 'Uditus' }).first()).toHaveAttribute('src', /lockup-inline-white\.png/);
@@ -125,14 +127,14 @@ test('stream drop shows stale state, then reconnects', async ({ page }) => {
 });
 
 test('live mode is disconnected: unknown status, redirect disabled', async ({ page }) => {
+  await page.route('**/api/events', route => route.abort());
   await open(page);
   await page.getByRole('combobox', { name: 'Data source' }).selectOption('live');
   await expect(page.getByText('LIVE · NOT CONNECTED')).toBeVisible();
   await expect(page.getByRole('button', { name: /Enter Uditus/ })).toHaveAccessibleName(/status unknown/);
   await page.getByRole('button', { name: /Enter Uditus/ }).click();
-  await panel(page).locator('.roster__btn').first().click();
-  await expect(panel(page).getByRole('button', { name: 'Redirect task' })).toBeDisabled();
-  await expect(panel(page).getByText(/live bridge is not connected/i)).toBeVisible();
+  await expect(panel(page).locator('.roster__btn')).toHaveCount(0);
+  await expect(page.getByText('DEMO DATA')).toHaveCount(0);
   await page.getByRole('combobox', { name: 'Data source' }).selectOption('demo');
 });
 

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { LiveAdapter } from '../adapters/live/liveAdapter';
 import { SCENARIOS, type ScenarioId } from '../adapters/demo/sim';
 import { BUSINESS_BY_ID, BUSINESSES } from '../core/config';
 import { businessCounts, workersIn } from '../core/selectors';
@@ -14,6 +15,7 @@ function ConnectionPill() {
     <span className={`conn conn--${conn}`} role="status" aria-live="polite">
       <span className="conn__dot" aria-hidden="true" />
       {label}
+      {store.adapter instanceof LiveAdapter && store.adapter.diagnostics.rejected > 0 ? ` · ${store.adapter.diagnostics.rejected} rejected${store.adapter.diagnostics.contractMismatch ? " · contract mismatch" : ""}` : ""}
     </span>
   );
 }
@@ -58,6 +60,7 @@ function BusinessesMenu() {
 export function TopBar() {
   const view = useUi((s) => s.view);
   const tab = useUi((s) => s.prefs.tab);
+  const source = useUi((s) => s.prefs.source);
   const state = useWorkshop((s) => s);
   const conn = state.connection;
   const biz = view.mode === 'interior' ? BUSINESS_BY_ID[view.businessId] : undefined;
@@ -70,8 +73,8 @@ export function TopBar() {
           Armis <span>Workshop</span>
         </span>
       </div>
-      <span className={`badge ${conn === 'disconnected' ? 'badge--live' : 'badge--demo'}`} title={conn === 'disconnected' ? 'No live data source is connected' : 'All data on screen is simulated'}>
-        {conn === 'disconnected' ? 'LIVE · NOT CONNECTED' : 'DEMO DATA'}
+      <span className={`badge ${source === 'live' ? 'badge--live' : 'badge--demo'}`} title={source === 'live' ? 'Read-only observed telemetry; not all Hermes activity is instrumented' : 'All data on screen is simulated'}>
+        {source === 'demo' ? 'DEMO DATA' : conn === 'connected' ? 'LIVE · OBSERVED' : conn === 'reconnecting' ? 'LIVE · STALE' : 'LIVE · NOT CONNECTED'}
       </span>
       <nav className="crumbs" aria-label="Breadcrumb">
         <ol>
@@ -115,7 +118,7 @@ export function TopBar() {
         ) : null}
         <ConnectionPill />
         {conn !== 'disconnected' ? (
-          <span className="clock" title="Simulated demo clock">
+          <span className="clock" title={source === 'demo' ? 'Simulated demo clock' : 'Local browser clock'}>
             <span className="small muted">{dateLabel(state.now)}</span> <strong className="mono">{shortClock(state.now)}</strong>
           </span>
         ) : null}
@@ -161,7 +164,7 @@ export function DemoBar() {
           }}
         >
           <option value="demo">Demo (simulated)</option>
-          <option value="live">Live (not connected)</option>
+          <option value="live">Live (read-only)</option>
         </select>
       </label>
       {!live && ctrl ? (
@@ -224,7 +227,7 @@ export function DemoBar() {
         </>
       ) : (
         <span className="small muted demobar__desc">
-          No live bridge is configured tonight. Counts and states show as unknown rather than guessed. See docs/LIVE-INTEGRATION.md.
+          Read-only local telemetry. Only explicitly bound sessions are observed; other work and capacity remain unknown.
         </span>
       )}
       <MotionSelect />
