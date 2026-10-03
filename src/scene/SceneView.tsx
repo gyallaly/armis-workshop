@@ -161,6 +161,7 @@ export function SceneView() {
       last = now;
       frame++;
       const s = store.get();
+      canvas.dataset.actors=JSON.stringify(sc.actors.get(viewKey)?.positions()??[]);
       const u = ui.get();
       const t = store.adapter?.clock() ?? s.now;
       cam.update(now);

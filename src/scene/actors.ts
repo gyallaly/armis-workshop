@@ -263,7 +263,7 @@ export class ActorSystem {
   }
 
   positions() {
-    return [...this.actors.values()].map(a => ({id:a.id, at:[...a.pos] as Pt, target:a.targetKey, state:a.state, moving:a.path.length > 0}));
+    return [...this.actors.values()].map(a => ({id:a.id, at:[...a.pos] as Pt, target:a.targetKey, state:a.state, moving:a.path.length > 0, pose:a.pose, animated:a.animated}));
   }
 
   screenOf(id: string): Pt | null {

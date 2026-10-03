@@ -1,6 +1,7 @@
 import type { AdapterSink, WorkshopAdapter } from '../adapter';
 import { mapObservation, projectSnapshot, validateObservation, type Observation } from './projection';
 import { normalizeSnapshot } from '../../core/normalize';
+import { currentWorkEvents, withCurrentWork } from './currentWork';
 
 export interface Stream {
   addEventListener(type: string, listener: (event: { data: string }) => void): void;
@@ -24,6 +25,7 @@ export class LiveAdapter implements WorkshopAdapter {
   private cursor = 0;
   private lastMessage = 0;
   private records: Observation[] = [];
+  private currentWork: unknown = null;
   private readonly now: () => number;
   private readonly createStream: () => Stream;
   constructor(options: Options = {}) {
@@ -61,7 +63,8 @@ export class LiveAdapter implements WorkshopAdapter {
           if (m.mode !== 'live' || !Array.isArray(m.observations) || m.observations.length > 10000) throw Error('Invalid snapshot');
           const records: Observation[] = m.observations.map(validateObservation);
           if (records.some((e, i) => e.cursor > m.cursor || (i > 0 && e.cursor <= records[i - 1]!.cursor))) throw Error('Invalid snapshot cursor');
-          const snapshot = normalizeSnapshot(projectSnapshot(records, this.now()));
+          this.currentWork = m.currentWork ?? null;
+          const snapshot = normalizeSnapshot(withCurrentWork(projectSnapshot(records, this.now()),this.currentWork));
           if (!snapshot) throw Error('Invalid projected snapshot');
           this.records = records; this.epoch = m.epoch; this.cursor = m.cursor;
           this.sink!.reset(); // authoritative replacement, including empty/restarted sources
@@ -70,7 +73,11 @@ export class LiveAdapter implements WorkshopAdapter {
         } else {
           if (this.epoch === null) { this.reject('Snapshot required before incremental events'); return; }
           if (m.epoch !== this.epoch) throw Error('Server restarted without snapshot');
-          if (kind === 'heartbeat') {
+          if (kind === 'current-work') {
+            if(m.cursor!==this.cursor)throw Error('Native stream cursor diverged');
+            this.currentWork=m.currentWork;
+            this.sink!.events(currentWorkEvents(this.currentWork));
+          } else if (kind === 'heartbeat') {
             if (m.cursor !== this.cursor) throw Error('Heartbeat cursor diverged');
           } else {
             if (!integer(m.previousCursor) || !Array.isArray(m.observations) || m.observations.length > 500) throw Error('Invalid event batch');
@@ -83,7 +90,7 @@ export class LiveAdapter implements WorkshopAdapter {
             const newRoles = records.some(e => e.workerId && !oldRoles.has(e.workerId));
             const combined = [...this.records, ...records];
             // Validate complete candidate before delivering any part.
-            const snapshot = normalizeSnapshot(projectSnapshot(combined, this.now()));
+            const snapshot = normalizeSnapshot(withCurrentWork(projectSnapshot(combined, this.now()),this.currentWork));
             if (!snapshot) throw Error('Invalid projected snapshot');
             const events = records.flatMap(mapObservation);
             this.records = combined; this.cursor = m.cursor;
@@ -94,7 +101,7 @@ export class LiveAdapter implements WorkshopAdapter {
         this.lastMessage = this.now(); this.diagnostics.message = '';
       } catch (e) { this.reject(e instanceof Error ? e.message : 'Invalid message'); this.recover(this.diagnostics.message); }
     };
-    for (const kind of ['snapshot','events','heartbeat']) stream.addEventListener(kind, handler(kind));
+    for (const kind of ['snapshot','events','heartbeat','current-work']) stream.addEventListener(kind, handler(kind));
     stream.onerror = () => { if (current()) this.recover('Local stream disconnected'); };
   }
   private reject(message: string) { this.diagnostics.rejected++; this.diagnostics.message = message; }
@@ -112,7 +119,7 @@ export class LiveAdapter implements WorkshopAdapter {
     this.stream?.close(); this.stream = null;
     if (this.timer !== null) clearInterval(this.timer);
     if (this.retry !== null) clearTimeout(this.retry);
-    this.timer = null; this.retry = null; this.sink = null; this.records = []; this.epoch = null;
+    this.timer = null; this.retry = null; this.sink = null; this.records = []; this.currentWork = null; this.epoch = null;
   }
   clock() { return this.now(); }
   requestRedirect() { return { accepted: false, reason: 'Read-only Live viewer: redirect and controls are disabled.' }; }

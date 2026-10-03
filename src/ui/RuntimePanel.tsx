@@ -2,12 +2,13 @@ import {useEffect,useState} from 'react';
 import {displayStatus} from '../core/selectors';
 import {useWorkshop,useUi} from './store';
 import type {SetupEvidence} from '../../server/evidence';
+import type {readArmisStatus} from '../../server/armis';
 import type {UditusSource} from '../../server/uditus';
 
 type Setup=ReturnType<SetupEvidence['read']>;
 type Business=Awaited<ReturnType<UditusSource['read']>>;
 type Missing={state:'unavailable';gap:string};
-interface Evidence {build:{revision:string;branch:string}|null;setup:Setup|Missing;uditus:Business|Missing}
+interface Evidence {build:{revision:string;branch:string}|null;setup:Setup|Missing;uditus:Business|Missing;armis?:ReturnType<typeof readArmisStatus>}
 /** Read-only supplemental evidence. It cannot start/retry a task or alter controls. */
 export function RuntimePanel(){
  const state=useWorkshop(s=>s),source=useUi(s=>s.prefs.source);
@@ -47,6 +48,15 @@ export function RuntimePanel(){
      <ol>{data.setup.state==='connected'&&data.setup.calls.filter(c=>c.workflowId===w.id).sort((a,b)=>(a.startedAt??0)-(b.startedAt??0)).map(c=><li key={c.id}>{c.phase} · <code>{c.roleId}</code> · {c.state}<br/>Requested: {c.requestedModel??'unknown'}<br/>Observed: {c.actualProvider??'unknown'} / {c.actualModel??'unknown'} · tokens {c.inputTokens??'unknown'} in / {c.outputTokens??'unknown'} out<br/>{c.failure&&<span>Failure: {c.failure.reason} · HTTP {c.failure.observedHttpStatus??'unknown'} · finish {c.failure.finishReason??'unknown'} · {c.failure.failureCategory??'category unknown'}<br/></span>}<code>{c.id}</code></li>)}</ol>
     </details>)}
    </>:<p>Loading setup evidence…</p>}
+   <h3>Armis durable operational database</h3>
+   {data?.armis&&'counts' in data.armis?<>
+    <p>{data.armis.state} · project <code>{data.armis.projectRef}</code>. Last verified database read-back: {new Date(data.armis.observedAt).toLocaleString()}.</p>
+    {data.armis.state==='stale'&&<p className="warn">Sync evidence is stale or held. Local runtime events remain independent; no remote freshness inferred.</p>}
+    <p>Pending synchronization: {data.armis.pending??'unknown'}.</p>
+    <ul>{Object.entries(data.armis.counts).map(([kind,count])=><li key={kind}>{kind}: {count} actual records</li>)}</ul>
+    <ul>{data.armis.tasks.map((t:{id:string;agent:string|null;parent:string|null;state:string})=><li key={t.id}><code>{t.id}</code> · {t.agent??'agent unknown'} · {t.state}{t.parent?<> · parent <code>{t.parent}</code></>:null}</li>)}</ul>
+    <p>{data.armis.limitation}</p>
+   </>:<p>{data?.armis?.state==='unavailable'?data.armis.gap:'No Armis database read-back bound'}</p>}
    <h3>Uditus read-only business sources</h3>
    {data?.uditus&&'sources' in data.uditus?<>
     <p>Verified configured project: <code>{data.uditus.projectRef}</code>. Observed {new Date(data.uditus.observedAt).toLocaleString()}. Reads refresh every 30 seconds.</p>

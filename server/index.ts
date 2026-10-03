@@ -4,13 +4,14 @@ import { builtAssets } from './assets.ts';
 import { Journal } from './journal.ts';
 import { HermesMetadata } from './hermes.ts';
 import { CurrentWork } from './current-work.ts';
+import { readArmisStatus } from './armis.ts';
 import { SetupEvidence } from './evidence.ts';
 import { bindUditus, type UditusSource } from './uditus.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ServerResponse } from 'node:http';
 
-export interface ViewerServerOptions { dist: string; dbPath?: string; hermesDbPath?: string; hermesSessionId?: string; uditusEnvPath?: string; currentWorkDbPath?: string; currentWorkChatId?: string; currentWorkThreadId?: string; port?: number }
+export interface ViewerServerOptions { dist: string; dbPath?: string; hermesDbPath?: string; hermesSessionId?: string; uditusEnvPath?: string; currentWorkDbPath?: string; currentWorkChatId?: string; currentWorkThreadId?: string; armisStatusPath?: string; port?: number }
 /** Starts a loopback-only listener; await its listening event before use. */
 export function createViewerServer(options: ViewerServerOptions): Server {
   const sessions = new Set<string>();
@@ -76,7 +77,7 @@ export function createViewerServer(options: ViewerServerOptions): Server {
       let setup: object = {state:'unavailable',gap:'No explicitly bound setup evidence journal'};
       try { if (evidence) setup = evidence.read(); } catch { setup = {state:'unavailable',gap:'Bound setup evidence schema is unavailable'}; }
       res.setHeader('Content-Type','application/json');
-      const complete = (business: object) => { if (!res.destroyed) res.end(JSON.stringify({build,setup,uditus:business})); };
+      const complete = (business: object) => { if (!res.destroyed) res.end(JSON.stringify({build,setup,uditus:business,armis:readArmisStatus(options.armisStatusPath)})); };
       if (!uditus) complete({state:'unavailable',gap:'No authorized Uditus project environment bound'});
       else void uditus.read().then(complete,()=>complete({state:'unavailable',gap:'Uditus read failed'}));
       return;
