@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { DisconnectedLiveAdapter, type AdapterSink, type WorkshopAdapter } from '../adapters/adapter';
 import { DemoAdapter } from '../adapters/demo/demoAdapter';
+import { configuredBridgeUrl, LiveBridgeAdapter } from '../adapters/live';
 import type { ScenarioId } from '../adapters/demo/sim';
 import { ROSTER } from '../core/config';
 import { type Action, initialState, reduce } from '../core/reducer';
@@ -9,7 +10,7 @@ import type { RedirectRequest, TrafficDot, Worker, WorkshopState } from '../core
 // ------------------------------------------------------------ persistence
 
 const PREFS_KEY = 'armis-workshop.prefs.v1';
-const ROSTER_KEY = 'armis-workshop.roster.v1';
+const ROSTER_KEY = 'armis-workshop.roster.control.v2';
 
 export interface Prefs {
   source: 'demo' | 'live';
@@ -52,7 +53,7 @@ export function loadRoster(): Worker[] {
   } catch {
     stored = {};
   }
-  const roster = ROSTER.map((w) => (stored[w.id] ? { ...w, name: stored[w.id]!.name, appearance: stored[w.id]!.appearance } : w));
+  const roster = ROSTER.map((w) => (stored[w.id] ? { ...w, appearance: stored[w.id]!.appearance } : w));
   save(ROSTER_KEY, Object.fromEntries(roster.map((w) => [w.id, { name: w.name, appearance: w.appearance }])));
   return roster;
 }
@@ -186,7 +187,8 @@ class WorkshopStore extends Store<WorkshopState> implements AdapterSink {
       demo.subscribe((d) => ui.update({ demo: d }));
       this.adapter = demo;
     } else {
-      this.adapter = new DisconnectedLiveAdapter();
+      const endpoint = configuredBridgeUrl();
+      this.adapter = endpoint ? new LiveBridgeAdapter(endpoint) : new DisconnectedLiveAdapter();
     }
     this.adapter.start(this);
   }

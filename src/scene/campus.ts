@@ -36,7 +36,7 @@ export interface CampusScene {
   buildings: BuildingHit[];
   /** Art-pixel polylines from HQ to each business entrance. */
   routes: Record<string, Pt[]>;
-  drawAmbient(ctx: Ctx, t: number, motion: boolean): void;
+  drawAmbient(ctx: Ctx, t: number, motion: boolean, taskFlow?: boolean): void;
 }
 
 export interface SceneAssets {
@@ -95,37 +95,41 @@ const ROUTES_W: Record<string, Pt[]> = {
 };
 
 export function buildCampus(assets: SceneAssets): CampusScene {
-  const { canvas, ctx } = makeCanvas(W, H);
+  const { canvas, ctx: baseCtx } = makeCanvas(W, H);
+  let ctx = baseCtx;
   const iso = new Iso(550, 190);
+  const occluders: { canvas: HTMLCanvasElement; x: number; y: number; depth: number }[] = [];
+  // Cache physical objects separately so a pedestrian behind a tree or facade
+  // can be concealed without rebuilding the city on every animation frame.
+  const captureObject = (draw: () => void, x: number, y: number, w: number, h: number, depth: number) => {
+    const layer = makeCanvas(w, h);
+    const prior = ctx;
+    ctx = layer.ctx;
+    ctx.translate(-x, -y);
+    draw();
+    ctx = prior;
+    ctx.drawImage(layer.canvas, x, y);
+    occluders.push({ canvas: layer.canvas, x, y, depth });
+  };
   const lights: { x: number; y: number; c: string; r: number; a: number }[] = [];
   const rnd = lcg(20261002);
 
-  // ---------------------------------------------------------------- ground
-  ctx.fillStyle = "#0c1611";
+  // Open water surrounds a single bounded island. No off-island scenery.
+  ctx.fillStyle = C.water;
   ctx.fillRect(0, 0, W, H);
-  for (let i = 0; i < 2600; i++) px(ctx, rnd() * W, rnd() * H, rnd() < 0.5 ? "#101d16" : "#0a130e", 2, 1);
-  // water everywhere, ground on top
-  top(ctx, iso, -400, -400, 900, 900, -8, C.water);
-  stippleTop(ctx, iso, -100, -100, 800, 800, -8, '#10223a', 0.03, 7);
-  // far bank (behind the island), dark lawn
-  top(ctx, iso, -420, -420, 520, 520, 0, '#111d17');
-  // embankment along the front edges of the island
+  for (let i = 0; i < 1900; i++) px(ctx, rnd() * W, rnd() * H, rnd() < 0.5 ? '#102642' : '#122b48', 3, 1);
   const E = 480;
-  left(ctx, iso, E, -420, E, -8, 0, C.bankDk);
-  right(ctx, iso, E, -420, E, -8, 0, C.bank);
-  for (let i = -400; i < E; i += 6) {
-    left(ctx, iso, E, i, i + 1, -8, 0, '#17181f');
-    right(ctx, iso, E, i, i, -8, 0, '#22242d');
-  }
-  left(ctx, iso, E, -420, E, -1, 0, '#4a4d5c');
-  right(ctx, iso, E, -420, E, -1, 0, '#555869');
-
-  // island lawn with texture
+  // Raised seawall grounds the island above the water plane.
+  left(ctx, iso, E, 0, E, -8, 0, C.bankDk);
+  right(ctx, iso, E, 0, E, -8, 0, C.bank);
+  left(ctx, iso, E, 0, E, -1, 0, '#4a4d5c');
+  right(ctx, iso, E, 0, E, -1, 0, '#555869');
   top(ctx, iso, 0, 0, E, E, 0, C.grass);
   stippleTop(ctx, iso, 0, 0, E, E, 0, C.grass2, 0.12, 3);
   stippleTop(ctx, iso, 0, 0, E, E, 0, C.grass3, 0.04, 5);
-  stippleTop(ctx, iso, -420, -420, 0, E, 0, '#15241b', 0.05, 9);
-  stippleTop(ctx, iso, 0, -420, E, 0, 0, '#15241b', 0.05, 11);
+  // A continuous rear shoreline makes the water separation visible.
+  top(ctx, iso, 0, 0, E, 6, 0, C.stone);
+  top(ctx, iso, 0, 0, 6, E, 0, C.stone);
 
   // perimeter promenade along the water
   top(ctx, iso, 0, E - 26, E, E, 0, C.stone);
@@ -198,32 +202,6 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     miniPerson(ctx, sx - 2, sy - 2, PEOPLE[(bx + by) % PEOPLE.length]!, true);
   }
 
-  // ------------------------------------------------- back-bank city & trees
-  const far: [number, number, number, number, number][] = [];
-  for (let row = 0; row < 3; row++)
-    for (let i = 0; i < 20; i++) {
-      if (rnd() < 0.62) continue;
-      const a = -50 - row * 70 - rnd() * 20;
-      const b = -100 + i * 32 + rnd() * 8;
-      const dims: [number, number, number] = [18 + rnd() * 14, 18 + rnd() * 14, 14 + rnd() * (row === 0 ? 26 : 50)];
-      far.push([a, b, ...dims]);
-      if (rnd() < 0.85) far.push([b, a, ...dims]);
-    }
-  far.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
-  for (const [x, y, w, d, h] of far) {
-    const wall = mix('#10151f', '#161c2a', rnd());
-    box(ctx, iso, x, y, x + w, y + d, 0, h, { top: shade(wall, 1.2), left: wall, right: shade(wall, 0.75) });
-    for (let z = 6; z < h - 4; z += 7)
-      for (let u = 2; u < w - 2; u += 4) {
-        if (rnd() < 0.34) {
-          left(ctx, iso, y + d, x + u, x + u + 2, z, z + 3, rnd() < 0.7 ? C.winDim : C.win);
-          lights.push({ x: iso.x(x + u, y + d), y: iso.y(x + u, y + d, z + 1), c: '#ffb54d', r: 6, a: 0.25 });
-        }
-      }
-    for (let z = 6; z < h - 4; z += 7)
-      for (let u = 2; u < d - 2; u += 4) if (rnd() < 0.15) right(ctx, iso, x + w, y + u, y + u + 1, z, z + 3, C.winDim);
-  }
-
   // ------------------------------------------------------------ props list
   type Prop = { wx: number; wy: number; draw: () => void; behind?: boolean };
   const props: Prop[] = [];
@@ -243,16 +221,13 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   ];
   const free = (x: number, y: number) => !blocked.some((r) => x > r.x0 && x < r.x1 && y > r.y0 && y < r.y1);
 
-  // trees: island + back bank
-  for (let i = 0; i < 760; i++) {
-    const back = i < 260;
-    const x = back ? -40 + rnd() * 560 : 6 + rnd() * (E - 40);
-    const y = back ? (rnd() < 0.5 ? -40 + rnd() * 36 : -40 + rnd() * 560) : 6 + rnd() * (E - 40);
-    if (back && x > -2 && y > -2) continue;
-    if (!back && !free(x, y)) continue;
-    if (!back && rnd() < 0.12) continue;
-    const size = back ? 7 + rnd() * 5 : 6 + rnd() * 5;
-    const kind = rnd() < (back ? 0.4 : 0.15) ? 'pine' : rnd() < 0.08 ? 'blossom' : 'round';
+  // Trees remain inside the shoreline and clear of structures/routes.
+  for (let i = 0; i < 500; i++) {
+    const x = 10 + rnd() * (E - 50);
+    const y = 10 + rnd() * (E - 50);
+    if (!free(x, y) || rnd() < 0.12) continue;
+    const size = 6 + rnd() * 5;
+    const kind = rnd() < 0.15 ? 'pine' : rnd() < 0.08 ? 'blossom' : 'round';
     const seed = (rnd() * 1e9) | 0;
     props.push({ wx: x, wy: y, draw: () => tree(ctx, iso.x(x, y), iso.y(x, y), size, seed, kind) });
   }
@@ -326,23 +301,28 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   patio({ x0: ET.x1 - 32, y0: ET.y1 + 6, x1: ET.x1 - 4, y1: ET.y1 + 40 }, '#efe2c8', 8);
 
   // ---------------------------------------------------------------- draw
-  const behind = (p: Prop) => [HQ, UD, ET].some((b) => p.wx < b.x1 && p.wy < b.y1 && p.wx > b.x0 - 60 && p.wy > b.y0 - 60);
-  props.sort((a, b) => a.wx + a.wy - (b.wx + b.wy));
-  for (const p of props) if (behind(p)) p.draw();
+  const drawProp = (p: Prop) => captureObject(p.draw, Math.floor(iso.x(p.wx, p.wy)) - 48, Math.floor(iso.y(p.wx, p.wy)) - 76, 96, 96, p.wx + p.wy);
 
   // fountain
   drawFountain(ctx, iso, 272, 272);
 
   const hits: BuildingHit[] = [];
-  hits.push(drawHQ(ctx, iso, lights));
-  hits.push(drawShop(ctx, iso, UD, 'uditus', lights, assets));
-  hits.push(drawShop(ctx, iso, ET, 'etsy-studio', lights, assets));
-  hits.push(drawTrading(ctx, iso, AL, lights));
+  const drawBuilding = (r: Rect, draw: () => BuildingHit) => {
+    const x = Math.floor(iso.x(r.x0, r.y1)) - 50;
+    const y = Math.floor(iso.y(r.x0, r.y0)) - 220;
+    captureObject(() => hits.push(draw()), x, y, r.x1 - r.x0 + r.y1 - r.y0 + 100, 340, r.x1 + r.y1);
+  };
+  const objects = props.map((p) => ({ depth: p.wx + p.wy, draw: () => drawProp(p) }));
+  objects.push(
+    { depth: HQ.x1 + HQ.y1, draw: () => drawBuilding(HQ, () => drawHQ(ctx, iso, lights)) },
+    { depth: UD.x1 + UD.y1, draw: () => drawBuilding(UD, () => drawShop(ctx, iso, UD, 'uditus', lights, assets)) },
+    { depth: ET.x1 + ET.y1, draw: () => drawBuilding(ET, () => drawShop(ctx, iso, ET, 'etsy-studio', lights, assets)) },
+    { depth: AL.x1 + AL.y1, draw: () => drawBuilding(AL, () => drawTrading(ctx, iso, AL, lights)) },
+  );
+  objects.sort((a, b) => a.depth - b.depth);
+  for (const object of objects) object.draw();
 
-  for (const p of props) if (!behind(p)) p.draw();
 
-  // bridge over the water (front right)
-  drawBridge(ctx, iso, lights, E);
 
   // ---------------------------------------------------------------- lights
   for (const l of lights) glow(ctx, l.x, l.y, l.c, l.r, l.a);
@@ -361,7 +341,6 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   const routes: Record<string, Pt[]> = {};
   for (const [id, pts] of Object.entries(ROUTES_W)) {
     routes[id] = pts.map(([x, y]) => [iso.x(x, y), iso.y(x, y)]);
-    drawDotted(ctx, routes[id]!, '#3ee6ff', 5);
   }
 
   // water sample points for shimmer
@@ -391,12 +370,25 @@ export function buildCampus(assets: SceneAssets): CampusScene {
     base: canvas,
     buildings: hits,
     routes,
-    drawAmbient(g, t, motion) {
-      for (const w of walkers) {
+    drawAmbient(g, t, motion, taskFlow = true) {
+      if (taskFlow) for (const route of Object.values(routes)) drawDotted(g, route, '#3ee6ff', 5);
+      const people = walkers.map((w) => {
         const k = motion ? (w.phase + (t / 1000) * w.speed) % 2 : w.phase;
         const along = k > 1 ? 2 - k : k;
         const [x, y] = alongPath(w.route, along);
+        return { w, x, y, depth: (y - iso.oy) * 2 };
+      }).sort((a, b) => a.depth - b.depth);
+      for (const { w, x, y, depth } of people) {
         miniPerson(g, x, y, w.look, false, motion ? Math.floor(t / 220 + w.phase * 10) % 2 : 0);
+        g.save();
+        g.beginPath();
+        g.rect(Math.floor(x) - 5, Math.floor(y) - 14, 11, 16);
+        g.clip();
+        for (const layer of occluders) {
+          if (layer.depth <= depth || layer.x > x + 5 || layer.x + layer.canvas.width < x - 5 || layer.y > y + 2 || layer.y + layer.canvas.height < y - 14) continue;
+          g.drawImage(layer.canvas, layer.x, layer.y);
+        }
+        g.restore();
       }
       if (!motion) return;
       // water shimmer
@@ -537,106 +529,72 @@ function hullOf(iso: Iso, r: Rect, h: number): Pt[] {
 }
 
 function drawHQ(ctx: Ctx, iso: Iso, lights: { x: number; y: number; c: string; r: number; a: number }[]): BuildingHit {
-  const wall = { top: '#323a52', left: '#2a3046', right: '#1d2133', rim: '#4a5578' };
   const { x0, y0, x1, y1 } = HQ;
-  // podium
-  box(ctx, iso, x0, y0, x1, y1, 0, 10, { top: '#3a4158', left: '#30364a', right: '#232838', rim: '#565f80' });
-  // wings
-  const wingL: Rect = { x0: x0 + 4, y0: y0 + 50, x1: x0 + 52, y1: y1 - 4 };
-  const wingR: Rect = { x0: x0 + 56, y0: y0 + 4, x1: x1 - 4, y1: y0 + 46 };
-  const tower: Rect = { x0: x0 + 10, y0: y0 + 8, x1: x0 + 62, y1: y0 + 58 };
-  for (const [wr, h, seed] of [
-    [wingR, 64, 11],
-    [wingL, 64, 12],
-  ] as [Rect, number, number][]) {
-    box(ctx, iso, wr.x0, wr.y0, wr.x1, wr.y1, 10, h, wall);
-    windowGrid(ctx, iso, 'left', wr.y1, wr.x0, wr.x1, 10, 4, 13, seed, lights, { w: 7, gap: 2, litP: 0.7, tall: true });
-    windowGrid(ctx, iso, 'right', wr.x1, wr.y0, wr.y1, 10, 4, 13, seed + 1, lights, { w: 7, gap: 2, litP: 0.65, tall: true });
-    for (let z = 23; z < h; z += 13) {
-      left(ctx, iso, wr.y1, wr.x0, wr.x1, z, z + 1, '#4a5578');
-      right(ctx, iso, wr.x1, wr.y0, wr.y1, z, z + 1, '#3a4360');
-    }
-    // roof garden
-    top(ctx, iso, wr.x0 + 3, wr.y0 + 3, wr.x1 - 3, wr.y1 - 3, h, '#1d3324');
-    stippleTop(ctx, iso, wr.x0 + 3, wr.y0 + 3, wr.x1 - 3, wr.y1 - 3, h, '#2e5a37', 0.25, seed);
-    for (let k = 0; k < 5; k++) {
-      const bx = wr.x0 + 8 + ((k * 13 + seed) % (wr.x1 - wr.x0 - 14));
-      const by = wr.y0 + 8 + ((k * 17 + seed * 3) % (wr.y1 - wr.y0 - 14));
-      bush(ctx, iso.x(bx, by), iso.y(bx, by, h), 4, k + seed, k % 2 ? '#ffd27a' : undefined);
-    }
-    stringLights(ctx, iso.x(wr.x0, wr.y1), iso.y(wr.x0, wr.y1, h + 6), iso.x(wr.x1, wr.y1), iso.y(wr.x1, wr.y1, h + 6), 3);
-    stringLights(ctx, iso.x(wr.x1, wr.y1), iso.y(wr.x1, wr.y1, h + 6), iso.x(wr.x1, wr.y0), iso.y(wr.x1, wr.y0, h + 6), 3);
-    lights.push({ x: iso.x(wr.x1, wr.y1), y: iso.y(wr.x1, wr.y1, h + 4), c: '#ffd27a', r: 22, a: 0.35 });
+  const stone = { top: '#3c465c', left: '#303a50', right: '#212c40', rim: '#6b7a96' };
+  const tower = { x0: x0 + 22, y0: y0 + 12, x1: x1 - 22, y1: y0 + 62 };
+  const th = 124;
+  // Continuous grounded podium, with a reserved sign band above its lobby.
+  box(ctx, iso, x0, y0, x1, y1, 0, 28, stone);
+  storefront(ctx, iso, 'left', y1, x0 + 5, x1 - 5, lights, 31, 14);
+  storefront(ctx, iso, 'right', x1, y0 + 5, y1 - 5, lights, 32, 14);
+  for (const z of [2, 15, 26]) {
+    left(ctx, iso, y1, x0, x1, z, z + 1, '#697b96');
+    right(ctx, iso, x1, y0, y1, z, z + 1, '#4a5b77');
   }
-  // tower
-  const th = 118;
-  box(ctx, iso, tower.x0, tower.y0, tower.x1, tower.y1, 10, th, { top: '#363f5a', left: '#2c3349', right: '#1f2436', rim: '#55618a' });
-  windowGrid(ctx, iso, 'left', tower.y1, tower.x0, tower.x1, 64, 4, 13, 21, lights, { w: 8, gap: 2, litP: 0.75, tall: true });
-  windowGrid(ctx, iso, 'right', tower.x1, tower.y0, tower.y1, 64, 4, 13, 22, lights, { w: 8, gap: 2, litP: 0.7, tall: true });
-  for (let z = 64; z < th; z += 13) {
-    left(ctx, iso, tower.y1, tower.x0, tower.x1, z, z + 1, '#55618a');
-    right(ctx, iso, tower.x1, tower.y0, tower.y1, z, z + 1, '#404a6a');
+  // Roof terrace belongs to the podium; no freestanding/floating wings.
+  top(ctx, iso, x0 + 3, y0 + 3, x1 - 3, y1 - 3, 28, '#253448');
+  for (let u = x0 + 5; u < x1 - 4; u += 8) top(ctx, iso, u, y0 + 64, u + 1, y1 - 4, 28, '#33465b');
+  for (const u of [x0 + 8, x1 - 12]) {
+    box(ctx, iso, u, y1 - 16, u + 7, y1 - 8, 28, 32, { top: '#244335', left: '#45536a', right: '#2f3c50' });
+    bush(ctx, iso.x(u + 3, y1 - 12), iso.y(u + 3, y1 - 12, 32), 4, u);
   }
-  // provisional winged emblem on the tower's left face (pixel art, gold)
+  // Central command tower. Horizontal blank band is reserved for the emblem.
+  box(ctx, iso, tower.x0, tower.y0, tower.x1, tower.y1, 28, th, stone);
+  for (const z of [32, 44, 56, 94, 106]) {
+    windowGrid(ctx, iso, 'left', tower.y1, tower.x0 + 4, tower.x1 - 4, z, 1, 12, z, lights, { w: 6, gap: 3, litP: 0.72, tall: true });
+    windowGrid(ctx, iso, 'right', tower.x1, tower.y0 + 4, tower.y1 - 4, z, 1, 12, z + 3, lights, { w: 6, gap: 3, litP: 0.62, tall: true });
+  }
+  for (const z of [29, 42, 54, 66, 90, 104, 116, 123]) {
+    left(ctx, iso, tower.y1, tower.x0, tower.x1, z, z + 1, '#687c9a');
+    right(ctx, iso, tower.x1, tower.y0, tower.y1, z, z + 1, '#435773');
+  }
+  for (const u of [tower.x0 + 1, tower.x1 - 2]) left(ctx, iso, tower.y1, u, u + 1, 29, th, '#9aabc1');
+  for (const u of [tower.y0 + 1, tower.y1 - 2]) right(ctx, iso, tower.x1, u, u + 1, 29, th, '#6c829e');
   const ex = (tower.x0 + tower.x1) / 2;
-  const ez = 50;
-  const gold = '#e2a83a';
-  const goldHi = '#ffd77a';
-  left(ctx, iso, tower.y1, ex - 1, ex + 1, ez - 22, ez + 6, gold);
-  for (let k = 0; k < 14; k++) {
-    const len = 14 - k;
-    left(ctx, iso, tower.y1, ex - 2 - len, ex - 2, ez - k * 0.9, ez - k * 0.9 + 1, k % 3 ? gold : goldHi);
-    left(ctx, iso, tower.y1, ex + 2, ex + 2 + len, ez - k * 0.9, ez - k * 0.9 + 1, k % 3 ? gold : goldHi);
+  left(ctx, iso, tower.y1, tower.x0 + 4, tower.x1 - 4, 69, 88, '#17283e');
+  left(ctx, iso, tower.y1, ex - 1, ex + 1, 71, 85, '#f2c56b');
+  for (let k = 0; k < 7; k++) {
+    const len = 13 - k;
+    left(ctx, iso, tower.y1, ex - len - 2, ex - 2, 83 - k * 1.5, 84 - k * 1.5, '#f2c56b');
+    left(ctx, iso, tower.y1, ex + 2, ex + len + 2, 83 - k * 1.5, 84 - k * 1.5, '#ffe2a1');
   }
-  for (let k = 0; k < 6; k++) {
-    left(ctx, iso, tower.y1, ex - 3 + (k % 2) * 4, ex - 1 + (k % 2) * 4, ez - 6 - k * 3, ez - 4 - k * 3, goldHi);
-  }
-  left(ctx, iso, tower.y1, ex - 2, ex + 2, ez + 6, ez + 9, goldHi);
-  lights.push({ x: iso.x(ex, tower.y1), y: iso.y(ex, tower.y1, ez - 4), c: '#ffc04a', r: 36, a: 0.9 });
-  // roof: dish + antenna + parapet
-  top(ctx, iso, tower.x0 + 2, tower.y0 + 2, tower.x1 - 2, tower.y1 - 2, th, '#2a3045');
-  box(ctx, iso, tower.x0 + 6, tower.y0 + 6, tower.x0 + 16, tower.y0 + 16, th, th + 6, { top: '#5a6382', left: '#454d68', right: '#353b52' });
-  const dx = iso.x(tower.x0 + 30, tower.y0 + 26);
-  const dy = iso.y(tower.x0 + 30, tower.y0 + 26, th);
-  px(ctx, dx, dy - 10, '#5b6380', 2, 10);
-  for (let yy = -10; yy <= 10; yy++)
-    for (let xx = -12; xx <= 12; xx++) {
-      const d = (xx / 12) ** 2 + (yy / 10) ** 2;
-      if (d <= 1 && xx - yy * 0.6 > -4) px(ctx, dx + xx, dy - 24 + yy, d > 0.75 ? '#c7cede' : mix('#9aa3bb', '#e8edf7', (xx + 12) / 24));
-    }
-  px(ctx, dx - 6, dy - 30, '#ff5a5a', 2, 2);
-  lights.push({ x: dx - 5, y: dy - 29, c: '#ff4a4a', r: 8, a: 0.8 });
-  px(ctx, iso.x(tower.x1 - 8, tower.y0 + 10), iso.y(tower.x1 - 8, tower.y0 + 10, th) - 26, '#6a7392', 1, 26);
-  // sign over the entrance (podium, left face): provisional "HERMES HQ"
+  rightText(ctx, iso, tower.x1, tower.y1 - 5, 83, 'ARMIS', '#b5cee7', 1);
+  lights.push({ x: iso.x(ex, tower.y1), y: iso.y(ex, tower.y1, 78), c: '#efbd67', r: 24, a: 0.5 });
+  // Stepped crown, grounded equipment and an architectural beacon.
+  box(ctx, iso, tower.x0 - 1, tower.y0 - 1, tower.x1 + 1, tower.y1 + 1, th, th + 3, { top: '#677d97', left: '#9db3cc', right: '#607994' });
+  box(ctx, iso, tower.x0 + 7, tower.y0 + 7, tower.x1 - 7, tower.y1 - 7, th + 3, th + 9, { top: '#283b50', left: '#3d526a', right: '#24394e', rim: '#b49b63' });
+  box(ctx, iso, ex - 4, tower.y0 + 19, ex + 4, tower.y0 + 27, th + 9, th + 18, { top: '#e5cd91', left: '#ad8b4e', right: '#806839' });
+  const bx = iso.x(ex, tower.y0 + 23), by = iso.y(ex, tower.y0 + 23, th + 18);
+  px(ctx, bx, by - 8, '#9eb3c9', 1, 8);
+  px(ctx, bx - 1, by - 10, '#e8d39d', 3, 2);
+  lights.push({ x: bx, y: by - 9, c: '#edcf83', r: 13, a: 0.5 });
+  // Facade sign stays within the podium instead of spilling past its edge.
   const sign = BUSINESS_BY_ID['hermes-hq']!.brand.signText;
-  const tw = textWidth(sign, 2);
-  const sx0 = HQ_DOOR[0] - tw / 2;
-  left(ctx, iso, y1, sx0 - 4, sx0 + tw + 4, 26, 42, '#141828');
-  left(ctx, iso, y1, sx0 - 4, sx0 + tw + 4, 41, 42, '#5a6690');
-  leftText(ctx, iso, y1 + 0, sx0, 38, sign, '#f4f2ea', 2);
-  lights.push({ x: iso.x(HQ_DOOR[0], y1), y: iso.y(HQ_DOOR[0], y1, 34), c: '#9fb8ff', r: 26, a: 0.35 });
-  // entrance: glass lobby + stairs
-  left(ctx, iso, y1, HQ_DOOR[0] - 14, HQ_DOOR[0] + 14, 0, 22, '#ffd98f');
-  for (let u = HQ_DOOR[0] - 14; u < HQ_DOOR[0] + 14; u += 5) left(ctx, iso, y1, u, u + 1, 0, 22, '#7a5a2e');
-  left(ctx, iso, y1, HQ_DOOR[0] - 5, HQ_DOOR[0] + 5, 0, 14, '#fff0c8');
-  lights.push({ x: iso.x(HQ_DOOR[0], y1), y: iso.y(HQ_DOOR[0], y1, 6), c: '#ffc860', r: 34, a: 0.9 });
-  for (let s = 0; s < 4; s++) {
-    box(ctx, iso, HQ_DOOR[0] - 16, y1 + s * 2, HQ_DOOR[0] + 16, y1 + s * 2 + 2, 0, 8 - s * 2, {
-      top: '#5c6176',
-      left: '#454a5c',
-      right: '#383c4b',
-    });
-  }
-  // podium windows on right face
-  storefront(ctx, iso, 'right', x1, y0, y1, lights, 31, 10);
-  const hull = hullOf(iso, HQ, th + 30);
-  return {
-    id: 'hermes-hq',
-    hull,
-    label: [iso.x(tower.x0, tower.y0), iso.y(tower.x0, tower.y0, th + 4)],
-    focus: [iso.x((x0 + x1) / 2, (y0 + y1) / 2), iso.y((x0 + x1) / 2, (y0 + y1) / 2, 50)],
-    door: [iso.x(...HQ_DOOR), iso.y(...HQ_DOOR)],
-  };
+  const tw = textWidth(sign, 1), sx = x0 + (x1 - x0 - tw) / 2;
+  left(ctx, iso, y1, sx - 4, sx + tw + 4, 17, 25, '#172638');
+  leftText(ctx, iso, y1, sx, 24, sign, '#e5d5ab', 1);
+  // Warm double-door lobby with a supported canopy; entry route stays at grade.
+  left(ctx, iso, y1, HQ_DOOR[0] - 7, HQ_DOOR[0] + 7, 0, 14, '#adbdbe');
+  left(ctx, iso, y1, HQ_DOOR[0] - 6, HQ_DOOR[0] + 6, 1, 13, '#ecd8a7');
+  left(ctx, iso, y1, HQ_DOOR[0], HQ_DOOR[0] + 1, 0, 14, '#47576c');
+  top(ctx, iso, HQ_DOOR[0] - 10, y1, HQ_DOOR[0] + 10, y1 + 5, 15, '#53687f');
+  for (const u of [HQ_DOOR[0] - 10, HQ_DOOR[0] + 9]) left(ctx, iso, y1 + 5, u, u + 1, 0, 15, '#71869c');
+  top(ctx, iso, HQ_DOOR[0] - 8, y1, HQ_DOOR[0] + 8, y1 + 8, 0, '#59697b');
+  lights.push({ x: iso.x(HQ_DOOR[0], y1), y: iso.y(HQ_DOOR[0], y1, 7), c: '#e8c884', r: 22, a: 0.65 });
+  return { id: 'hermes-hq', hull: hullOf(iso, HQ, th + 28),
+    label: [iso.x(tower.x0, tower.y0), iso.y(tower.x0, tower.y0, th + 8)],
+    focus: [iso.x((x0 + x1) / 2, (y0 + y1) / 2), iso.y((x0 + x1) / 2, (y0 + y1) / 2, 55)],
+    door: [iso.x(...HQ_DOOR), iso.y(...HQ_DOOR)] };
 }
 
 function drawShop(
@@ -664,6 +622,13 @@ function drawShop(
   windowGrid(ctx, iso, 'right', r.x1, r.y0, r.y1, 14, floors - 1, fh, isU ? 44 : 54, lights, { w: 6, gap: 3, litP: 0.55 });
   left(ctx, iso, r.y1, r.x0, r.x1, 13, 14, wall.rim);
   right(ctx, iso, r.x1, r.y0, r.y1, 13, 14, wall.rim);
+  // Continuous cornice and structural piers give each studio a grounded facade.
+  for (const z of [1, 27, h - 2]) {
+    left(ctx, iso, r.y1, r.x0, r.x1, z, z + 2, wall.rim);
+    right(ctx, iso, r.x1, r.y0, r.y1, z, z + 2, shade(wall.rim, 0.8));
+  }
+  for (const u of [r.x0 + 1, r.x1 - 3]) left(ctx, iso, r.y1, u, u + 2, 0, h, shade(wall.rim, 1.2));
+  for (const u of [r.y0 + 1, r.y1 - 3]) right(ctx, iso, r.x1, u, u + 2, 0, h, wall.rim);
   // awning
   const aw = isU ? '#1B4F80' : '#a85a35';
   const aw2 = isU ? '#3C7AB0' : '#d98a55';
@@ -671,9 +636,13 @@ function drawShop(
   for (let u = r.y0 + 2; u < r.y1 - 2; u++) right(ctx, iso, r.x1 + 3, u, u, 12, 14, (u >> 2) % 2 ? aw : aw2);
   // door
   if (frontFace === 'right') {
-    right(ctx, iso, r.x1, UD_DOOR[1] - 5, UD_DOOR[1] + 5, 0, 11, '#fff0c8');
+    right(ctx, iso, r.x1, UD_DOOR[1] - 7, UD_DOOR[1] + 7, 0, 12, '#63829c');
+    right(ctx, iso, r.x1, UD_DOOR[1] - 5, UD_DOOR[1] + 5, 0, 11, '#e9d6ad');
+    right(ctx, iso, r.x1, UD_DOOR[1], UD_DOOR[1] + 1, 0, 11, '#41546c');
   } else {
-    left(ctx, iso, r.y1, ET_DOOR[0] - 5, ET_DOOR[0] + 5, 0, 11, '#fff0c8');
+    left(ctx, iso, r.y1, ET_DOOR[0] - 7, ET_DOOR[0] + 7, 0, 12, '#b27d51');
+    left(ctx, iso, r.y1, ET_DOOR[0] - 5, ET_DOOR[0] + 5, 0, 11, '#e9d6ad');
+    left(ctx, iso, r.y1, ET_DOOR[0], ET_DOOR[0] + 1, 0, 11, '#70523c');
   }
   // roof
   top(ctx, iso, r.x0 + 2, r.y0 + 2, r.x1 - 2, r.y1 - 2, h, shade(wall.top, 0.8));
@@ -713,20 +682,21 @@ function drawShop(
     // map image (u along sign, v down) to wall: x = ox + x1 - wy, y = oy + (x1 + wy)/2 - z
     const ox = iso.ox + r.x1 - ys;
     const oy = iso.oy + (r.x1 + ys) / 2 - zTop + 2;
-    ctx.setTransform(1, -0.5, 0, 1, ox, oy);
+    ctx.transform(1, -0.5, 0, 1, ox, oy);
     ctx.drawImage(img, 0, 0, signW, signH);
     ctx.restore();
     ctx.imageSmoothingEnabled = false;
     lights.push({ x: iso.x(r.x1, ys - signW / 2), y: iso.y(r.x1, ys - signW / 2, zTop - 4), c: '#8FB6D6', r: 40, a: 0.55 });
   } else if (isU) {
-    rightText(ctx, iso, r.x1, r.y1 - 14, h - 8, brand.signText, '#ffffff', 2);
+    rightText(ctx, iso, r.x1, r.y1 - 14, h - 8, brand.signText, '#eaf0f4', 1);
   } else {
-    const tw = textWidth(brand.signText, 2);
+    const tw = textWidth(brand.signText, 1);
     const sx0 = r.x0 + (r.x1 - r.x0 - tw) / 2;
-    left(ctx, iso, r.y1, sx0 - 4, sx0 + tw + 4, h - 20, h - 4, '#241a17');
-    leftText(ctx, iso, r.y1, sx0, h - 8, brand.signText, '#ffe2c2', 2);
+    left(ctx, iso, r.y1, sx0 - 4, sx0 + tw + 4, h - 16, h - 4, '#241a17');
+    left(ctx, iso, r.y1, sx0 - 4, sx0 + tw + 4, h - 5, h - 4, '#b8875c');
+    leftText(ctx, iso, r.y1, sx0, h - 7, brand.signText, '#ffe2c2', 1);
     // provisional neutral emblem: a stitched tag
-    const ex = sx0 - 14;
+    const ex = r.x0 + 5;
     left(ctx, iso, r.y1, ex, ex + 8, h - 18, h - 6, '#e08a4f');
     left(ctx, iso, r.y1, ex + 2, ex + 6, h - 16, h - 8, '#3a2a22');
     left(ctx, iso, r.y1, ex + 3, ex + 5, h - 13, h - 11, '#ffe2c2');
@@ -744,7 +714,7 @@ function drawShop(
     ctx.imageSmoothingQuality = 'high';
     const ox = iso.ox + xs - r.y1;
     const oy = iso.oy + (xs + r.y1) / 2 - zTop;
-    ctx.setTransform(1, 0.5, 0, 1, ox, oy);
+    ctx.transform(1, 0.5, 0, 1, ox, oy);
     ctx.drawImage(img, 0, 0, s, Math.round((s * img.height) / img.width));
     ctx.restore();
     ctx.imageSmoothingEnabled = false;
@@ -752,33 +722,11 @@ function drawShop(
   const door = isU ? UD_DOOR : ET_DOOR;
   return {
     id,
-    hull: hullOf(iso, r, h + 14),
+    hull: hullOf(iso, r, h + 24),
     label: [iso.x((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), iso.y((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, h + 34)],
     focus: [iso.x((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), iso.y((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, 20)],
     door: [iso.x(...door), iso.y(...door)],
   };
-}
-
-function drawBridge(ctx: Ctx, iso: Iso, lights: { x: number; y: number; c: string; r: number; a: number }[], E: number) {
-  const y0 = 330;
-  const y1 = 350;
-  for (let x = E; x < E + 170; x += 2) {
-    const arch = Math.sin(((x - E) / 170) * Math.PI) * 7;
-    top(ctx, iso, x, y0, x + 2, y1, arch, '#5a4a3d');
-    left(ctx, iso, y1, x, x + 2, arch - 5, arch, '#3e3229');
-    if (x % 8 === 0) top(ctx, iso, x, y0, x + 1, y1, arch, '#4a3d33');
-    // railings
-    px(ctx, iso.x(x, y0), iso.y(x, y0, arch + 5), '#7a6a5a');
-    px(ctx, iso.x(x, y1), iso.y(x, y1, arch + 5), '#8a7a6a');
-    if (x % 20 === 0) {
-      px(ctx, iso.x(x, y1), iso.y(x, y1, arch + 5), '#6a5a4a', 1, 5);
-      px(ctx, iso.x(x, y0), iso.y(x, y0, arch + 5), '#6a5a4a', 1, 5);
-    }
-    if (x % 60 === 20) {
-      lampPost(ctx, iso.x(x, y1), iso.y(x, y1, arch), 12);
-      lights.push({ x: iso.x(x, y1), y: iso.y(x, y1, arch + 13), c: '#ffb54d', r: 22, a: 0.7 });
-    }
-  }
 }
 
 export function pointInPoly(p: Pt, poly: Pt[]): boolean {
@@ -791,7 +739,6 @@ export function pointInPoly(p: Pt, poly: Pt[]): boolean {
   return inside;
 }
 
-/** Aster Ledger: a glassy trading-floor building (provisional identity, PAPER trading only). */
 function drawTrading(ctx: Ctx, iso: Iso, r: Rect, lights: { x: number; y: number; c: string; r: number; a: number }[]): BuildingHit {
   const brand = BUSINESS_BY_ID['aster-ledger']!.brand;
   const h = 58;
@@ -811,12 +758,19 @@ function drawTrading(ctx: Ctx, iso: Iso, r: Rect, lights: { x: number; y: number
     right(ctx, iso, r.x1, r.y0, r.y1, z + 10, z + 11, '#2f6066');
   }
   lights.push({ x: iso.x((r.x0 + r.x1) / 2, r.y1), y: iso.y((r.x0 + r.x1) / 2, r.y1, 24), c: '#5fe3d0', r: 60, a: 0.45 });
+  // Slim bronze mullions frame the trading hall rather than floating over it.
+  for (let u = r.x0 + 2; u < r.x1; u += 14) left(ctx, iso, r.y1, u, u + 1, 0, h - 9, '#73918b');
+  for (let u = r.y0 + 2; u < r.y1; u += 14) right(ctx, iso, r.x1, u, u + 1, 0, h - 9, '#476d6d');
+  left(ctx, iso, r.y1, r.x0, r.x1, 1, 3, '#526f6b');
+  right(ctx, iso, r.x1, r.y0, r.y1, 1, 3, '#365653');
   // amber / cyan ticker band
   for (let u = r.x0; u < r.x1; u += 2) left(ctx, iso, r.y1, u, u + 1, h - 8, h - 5, (u >> 2) % 3 === 0 ? '#5fe3d0' : '#f2b84b');
   for (let u = r.y0; u <= r.y1; u += 2) right(ctx, iso, r.x1, u, u, h - 8, h - 5, (u >> 2) % 3 === 0 ? '#5fe3d0' : '#f2b84b');
   lights.push({ x: iso.x(r.x1, r.y1), y: iso.y(r.x1, r.y1, h - 6), c: '#f2b84b', r: 34, a: 0.45 });
   // entrance
-  left(ctx, iso, r.y1, AL_DOOR[0] - 6, AL_DOOR[0] + 6, 0, 12, '#fff0c8');
+  left(ctx, iso, r.y1, AL_DOOR[0] - 8, AL_DOOR[0] + 8, 0, 14, '#6f9b95');
+  left(ctx, iso, r.y1, AL_DOOR[0] - 6, AL_DOOR[0] + 6, 0, 12, '#e0d3a6');
+  left(ctx, iso, r.y1, AL_DOOR[0], AL_DOOR[0] + 1, 0, 12, '#3f615c');
   lights.push({ x: iso.x(AL_DOOR[0], r.y1), y: iso.y(AL_DOOR[0], r.y1, 5), c: '#ffc860', r: 26, a: 0.7 });
   // roof: market board billboard + antenna
   top(ctx, iso, r.x0 + 2, r.y0 + 2, r.x1 - 2, r.y1 - 2, h, '#13272a');

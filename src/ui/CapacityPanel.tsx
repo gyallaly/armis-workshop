@@ -1,7 +1,7 @@
 import type { Measured, Provenance, ProviderCapacity } from '../core/types';
 import { capacityConsumers, tasksWaitingOn } from '../core/selectors';
 import { Icon } from './Icon';
-import { ui, useWorkshop } from './store';
+import { ui, useUi, useWorkshop } from './store';
 import { clock, relTime } from './format';
 
 const PROV_LABEL: Record<Provenance, string> = {
@@ -42,7 +42,7 @@ function countdown(now: number, at: number | null): string {
 export function CapacityPanel() {
   const state = useWorkshop((s) => s);
   const caps = Object.values(state.capacity);
-  const demo = state.connection !== 'disconnected';
+  const demo = useUi(s => s.prefs.source === 'demo');
   return (
     <section className="cap" aria-labelledby="cap-h">
       <h2 id="cap-h" className="panel__h">

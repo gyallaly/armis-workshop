@@ -44,6 +44,12 @@ export interface BrandConfig {
 }
 
 export type DepartmentKind =
+  | 'leadership'
+  | 'delivery'
+  | 'quality'
+  | 'finance'
+  | 'efficiency'
+  | 'operations'
   | 'research'
   | 'creation'
   | 'audit'
@@ -93,6 +99,8 @@ export interface Worker {
   role: string;
   homeDepartmentId: DepartmentId;
   appearance: Appearance;
+  reportsTo?: string | null;
+  mandate?: string;
 }
 
 /**
@@ -138,6 +146,7 @@ export interface WorkerStatus {
 // --------------------------------------------------------------------- tasks
 
 export type TaskStage =
+  | 'unknown'
   | 'research'
   | 'creation'
   | 'audit'
@@ -203,6 +212,8 @@ export interface Task {
   /** Which capacity scopes may serve this task (explicit, not guessed). */
   eligibleCapacity: CapacityId[];
   heldReason?: string;
+  /** Source fields unavailable in imported Control exports. */
+  unreportedFields?: string[];
   createdAt: Millis;
   updatedAt: Millis;
 }
@@ -213,7 +224,7 @@ export interface Attempt {
   id: AttemptId;
   taskId: TaskId;
   workerId: WorkerId;
-  sessionId: SessionId;
+  sessionId?: SessionId;
   stage: TaskStage;
   startedAt: Millis;
   endedAt?: Millis;

@@ -10,6 +10,7 @@ import { CandidateDetail, LedgerPanel } from './LedgerPanel';
 import { clock, relTime, shortClock } from './format';
 import { Icon } from './Icon';
 import { store, ui, useUi, useWorkshop } from './store';
+import { OrganizationPanel } from './OrganizationPanel';
 
 export const STATE_ICON: Record<WorkerState, string> = {
   active: 'bolt',
@@ -204,6 +205,9 @@ function WorkerDetail({ state, worker }: { state: WorkshopState; worker: Worker 
         </div>
       </header>
       <dl className="kv">
+        <dt>Home workspace</dt><dd>{DEPARTMENT_BY_ID[worker.homeDepartmentId]?.label ?? 'Unmapped'}</dd>
+        <dt>Reports to</dt><dd>{worker.reportsTo ? state.workers[worker.reportsTo]?.name ?? worker.reportsTo : 'Owner'}</dd>
+        <dt>Responsibility</dt><dd>{worker.mandate ?? 'Not reported'}</dd>
         <dt>Provider</dt>
         <dd>
           {st?.provider ? (
@@ -309,13 +313,14 @@ function TaskDetail({ state, task }: { state: WorkshopState; task: Task }) {
         </dd>
         <dt>Repairs</dt>
         <dd>
-          {task.repairCount} of {task.maxRepairs} allowed
+          {task.unreportedFields?.includes('repair policy') ? 'Not reported' : `${task.repairCount} of ${task.maxRepairs} allowed`}
         </dd>
         <dt>Updated</dt>
         <dd>{relTime(state.now, task.updatedAt)}</dd>
         <dt>Task id</dt>
         <dd className="mono small">{task.id}</dd>
       </dl>
+      {task.unreportedFields?.length ? <p className="note">Not reported by Control: {task.unreportedFields.join(', ')}.</p> : null}
       {TRADING_BUSINESSES.has(task.businessId) ? <CandidateDetail businessId={task.businessId} taskId={task.id} /> : null}
       {task.status === 'ready' ? (
         <p className="note note--ok">Ready means the workshop finished its checks. It is not permission to send or publish.</p>
@@ -395,6 +400,7 @@ function Feed({ state }: { state: WorkshopState }) {
   const roster = biz ? workersIn(state, biz) : [];
   return (
     <section className="detail" aria-labelledby="feed-h">
+      <OrganizationPanel businessId={biz} />
       {biz ? (
         <>
           <h2 className="panel__h">Roster · {BUSINESS_BY_ID[biz]?.brand.displayName}</h2>

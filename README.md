@@ -81,6 +81,8 @@ docs/           ARCHITECTURE.md, LIVE-INTEGRATION.md
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/LIVE-INTEGRATION.md](docs/LIVE-INTEGRATION.md) and [ASSETS.md](ASSETS.md).
 
+For city expansion, follow [docs/BUILDING-SPEC.md](docs/BUILDING-SPEC.md). It defines island placement, building geometry, navigation, labels, Control mappings and acceptance checks. `AGENTS.md` directs future agents to this contract.
+
 ## Status and known gaps
 
 - The scene is procedurally drawn. It follows the approved mockups' composition and mood but is not pixel-identical, and closing the fidelity gap is ongoing work.

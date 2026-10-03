@@ -39,9 +39,9 @@ describe('reducer: de-duplication and ordering', () => {
 
   it('does not let an older worker.state overwrite a newer one', () => {
     let s = fresh();
-    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'w-iris', sourceTs: T0 + 500, payload: { state: 'idle' } }));
-    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'w-iris', sourceTs: T0 + 100, payload: { state: 'active', departmentId: 'uditus:audit' } }));
-    expect(s.statuses['w-iris']!.state).toBe('idle');
+    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'uditus.reviewer', sourceTs: T0 + 500, payload: { state: 'idle' } }));
+    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'uditus.reviewer', sourceTs: T0 + 100, payload: { state: 'active', departmentId: 'uditus:quality' } }));
+    expect(s.statuses['uditus.reviewer']!.state).toBe('idle');
     expect(s.stats.outOfOrder).toBe(1);
   });
 
@@ -56,8 +56,8 @@ describe('reducer: de-duplication and ordering', () => {
 
   it('redirect states never regress', () => {
     let s = fresh();
-    s = applyEvent(s, ev({ type: 'redirect.applied', workerId: 'w-kai', taskId: 't1', sourceTs: T0 + 50, payload: { redirectId: 'r1' } }));
-    s = applyEvent(s, ev({ type: 'redirect.acknowledged', workerId: 'w-kai', taskId: 't1', sourceTs: T0 + 40, payload: { redirectId: 'r1' } }));
+    s = applyEvent(s, ev({ type: 'redirect.applied', workerId: 'uditus.creator', taskId: 't1', sourceTs: T0 + 50, payload: { redirectId: 'r1' } }));
+    s = applyEvent(s, ev({ type: 'redirect.acknowledged', workerId: 'uditus.creator', taskId: 't1', sourceTs: T0 + 40, payload: { redirectId: 'r1' } }));
     expect(s.redirects.r1!.state).toBe('applied');
   });
 });
@@ -65,7 +65,7 @@ describe('reducer: de-duplication and ordering', () => {
 describe('reducer: truthful state', () => {
   it('a handoff to ready is not readiness - only task.ready is', () => {
     let s = withTask(fresh(), 't1', 'audit');
-    s = applyEvent(s, ev({ type: 'task.assigned', taskId: 't1', workerId: 'w-iris', attemptId: 'a1', sessionId: 's1', payload: { stage: 'audit' } }));
+    s = applyEvent(s, ev({ type: 'task.assigned', taskId: 't1', workerId: 'uditus.reviewer', attemptId: 'a1', sessionId: 's1', payload: { stage: 'audit' } }));
     s = applyEvent(s, ev({ type: 'task.handoff', taskId: 't1', payload: { from: 'audit', to: 'ready', outcome: 'ready' } }));
     expect(s.tasks.t1!.status).not.toBe('ready');
     s = applyEvent(s, ev({ type: 'task.ready', taskId: 't1' }));
@@ -74,17 +74,17 @@ describe('reducer: truthful state', () => {
 
   it('an attempt without a finished event has no outcome', () => {
     let s = withTask(fresh());
-    s = applyEvent(s, ev({ type: 'task.assigned', taskId: 't1', workerId: 'w-nova', attemptId: 'a1', sessionId: 's1', payload: { stage: 'research' } }));
+    s = applyEvent(s, ev({ type: 'task.assigned', taskId: 't1', workerId: 'uditus.researcher', attemptId: 'a1', sessionId: 's1', payload: { stage: 'research' } }));
     expect(s.attempts.a1!.outcome).toBeUndefined();
-    expect(s.attempts.a1!.workerId).toBe('w-nova');
+    expect(s.attempts.a1!.workerId).toBe('uditus.researcher');
     expect(s.attempts.a1!.sessionId).toBe('s1');
   });
 
   it('keeps stable identity separate from session ids', () => {
     let s = withTask(fresh());
-    s = applyEvent(s, ev({ type: 'task.assigned', taskId: 't1', workerId: 'w-nova', attemptId: 'a1', sessionId: 's1' }));
-    s = applyEvent(s, ev({ type: 'task.assigned', taskId: 't1', workerId: 'w-nova', attemptId: 'a2', sessionId: 's2' }));
-    expect(s.workers['w-nova']!.name).toBe('Nova');
+    s = applyEvent(s, ev({ type: 'task.assigned', taskId: 't1', workerId: 'uditus.researcher', attemptId: 'a1', sessionId: 's1' }));
+    s = applyEvent(s, ev({ type: 'task.assigned', taskId: 't1', workerId: 'uditus.researcher', attemptId: 'a2', sessionId: 's2' }));
+    expect(s.workers['uditus.researcher']!.name).toBe('Researcher');
     expect(s.tasks.t1!.attemptIds).toEqual(['a1', 'a2']);
   });
 
@@ -102,11 +102,11 @@ describe('reducer: truthful state', () => {
 describe('selectors: stale and disconnected data', () => {
   it('a worker silent past the threshold is shown unknown, not active', () => {
     let s = fresh();
-    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'w-kai', sourceTs: T0, payload: { state: 'active', departmentId: 'uditus:creation' } }));
+    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'uditus.creator', sourceTs: T0, payload: { state: 'active', departmentId: 'uditus:delivery' } }));
     s = reduce(s, { kind: 'tick', now: T0 + 1000 });
-    expect(displayStatus(s, s.workers['w-kai']!).state).toBe('active');
+    expect(displayStatus(s, s.workers['uditus.creator']!).state).toBe('active');
     s = reduce(s, { kind: 'tick', now: T0 + STALE_AFTER_MS + 1 });
-    const d = displayStatus(s, s.workers['w-kai']!);
+    const d = displayStatus(s, s.workers['uditus.creator']!);
     expect(d.state).toBe('unknown');
     expect(d.reported).toBe('active');
     expect(d.stale).toBe(true);
@@ -114,21 +114,21 @@ describe('selectors: stale and disconnected data', () => {
 
   it('reconnecting makes everything stale', () => {
     let s = fresh();
-    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'w-kai', payload: { state: 'active', departmentId: 'uditus:creation' } }));
+    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'uditus.creator', payload: { state: 'active', departmentId: 'uditus:delivery' } }));
     s = reduce(s, { kind: 'connection', connection: 'reconnecting' });
-    expect(displayStatus(s, s.workers['w-kai']!).state).toBe('unknown');
+    expect(displayStatus(s, s.workers['uditus.creator']!).state).toBe('unknown');
   });
 
   it('a worker with no status at all is unknown', () => {
     const s = fresh();
-    expect(displayStatus(s, s.workers['w-pip']!).state).toBe('unknown');
+    expect(displayStatus(s, s.workers['uditus.fixer']!).state).toBe('unknown');
   });
 
   it('offline is not turned into unknown by age', () => {
     let s = fresh();
-    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'w-oak', businessId: 'etsy-studio', sourceTs: T0, payload: { state: 'offline' } }));
+    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'etsy.fixer', businessId: 'etsy-studio', sourceTs: T0, payload: { state: 'offline' } }));
     s = reduce(s, { kind: 'tick', now: T0 + STALE_AFTER_MS * 3 });
-    expect(displayStatus(s, s.workers['w-oak']!).state).toBe('offline');
+    expect(displayStatus(s, s.workers['etsy.fixer']!).state).toBe('offline');
   });
 });
 
@@ -138,15 +138,16 @@ describe('selectors: counts do not conflate', () => {
     s = withTask(s, 't1', 'audit');
     s = withTask(s, 't2', 'audit');
     s = applyEvent(s, ev({ type: 'task.status', taskId: 't2', payload: { status: 'held', reason: 'needs you' } }));
-    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'w-iris', payload: { state: 'active', departmentId: 'uditus:audit' } }));
-    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'w-atlas', payload: { state: 'idle' } }));
-    const audit = departmentCounts(s, 'uditus:audit');
+    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'uditus.reviewer', payload: { state: 'active', departmentId: 'uditus:quality' } }));
+    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'uditus.quality', payload: { state: 'idle' } }));
+    const audit = departmentCounts(s, 'uditus:quality');
     expect(audit.active).toBe(1);
     expect(audit.roster).toBe(2);
     expect(audit.queued).toBe(1);
     expect(audit.held).toBe(1);
     const lounge = departmentCounts(s, 'uditus:lounge');
-    expect(lounge.present).toBe(1);
+    expect(lounge.present).toBe(7);
+    expect(lounge.unknown).toBe(6);
     expect(lounge.idle).toBe(1);
     const biz = businessCounts(s, 'uditus');
     expect(biz.roster).toBe(ROSTER.filter((w) => w.businessId === 'uditus').length);
@@ -157,15 +158,15 @@ describe('selectors: counts do not conflate', () => {
 describe('snapshots', () => {
   it('reconnect snapshot replaces status but keeps roster identity', () => {
     let s = fresh();
-    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'w-kai', payload: { state: 'active', departmentId: 'uditus:creation' } }));
+    s = applyEvent(s, ev({ type: 'worker.state', workerId: 'uditus.creator', payload: { state: 'active', departmentId: 'uditus:delivery' } }));
     s = reduce(s, {
       kind: 'snapshot',
       connection: 'demo',
       snapshot: { takenAt: T0 + 5000, workers: [], statuses: [], tasks: [], attempts: [], artifacts: [], capacity: [] },
     });
-    expect(s.workers['w-kai']!.name).toBe('Kai');
-    expect(s.statuses['w-kai']).toBeUndefined();
-    expect(displayStatus(s, s.workers['w-kai']!).state).toBe('unknown');
+    expect(s.workers['uditus.creator']!.name).toBe('Creator');
+    expect(s.statuses['uditus.creator']).toBeUndefined();
+    expect(displayStatus(s, s.workers['uditus.creator']!).state).toBe('unknown');
   });
 });
 

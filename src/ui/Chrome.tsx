@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { SCENARIOS, type ScenarioId } from '../adapters/demo/sim';
 import { BUSINESS_BY_ID, BUSINESSES } from '../core/config';
 import { businessCounts, workersIn } from '../core/selectors';
+import { observedSessions } from '../core/reconcile';
+import { configuredBridgeUrl } from '../adapters/live';
 import { DOT_STYLE } from '../scene/traffic';
 import { dateLabel, shortClock } from './format';
 import { Icon } from './Icon';
@@ -70,8 +72,8 @@ export function TopBar() {
           Armis <span>Workshop</span>
         </span>
       </div>
-      <span className={`badge ${conn === 'disconnected' ? 'badge--live' : 'badge--demo'}`} title={conn === 'disconnected' ? 'No live data source is connected' : 'All data on screen is simulated'}>
-        {conn === 'disconnected' ? 'LIVE · NOT CONNECTED' : 'DEMO DATA'}
+      <span className={`badge ${ui.get().prefs.source === 'live' ? 'badge--live' : 'badge--demo'}`} title={ui.get().prefs.source === 'live' ? 'Observed live source; missing observations remain unknown' : 'All activity on screen is simulated'}>
+        {ui.get().prefs.source === 'demo' ? 'DEMO DATA' : conn === 'connected' ? 'LIVE DATA' : conn === 'reconnecting' ? 'LIVE · UNCONFIRMED' : 'LIVE · NOT CONNECTED'}
       </span>
       <nav className="crumbs" aria-label="Breadcrumb">
         <ol>
@@ -105,17 +107,18 @@ export function TopBar() {
               <Icon name="user" size={15} /> {counts.active} working
             </span>
             <span>
-              <Icon name="lounge" size={15} /> {counts.idle} idle
+              <Icon name="lounge" size={15} /> {counts.idle} resting
             </span>
             <span>
               <Icon name="doc" size={15} /> {counts.queued + counts.waitingProvider} queued
             </span>
             {counts.held ? <span className="warn">{counts.held} held</span> : null}
+            <span>{counts.roster} agents · {biz ? observedSessions(state,biz.id) : 0} observed sessions</span>
           </span>
         ) : null}
         <ConnectionPill />
         {conn !== 'disconnected' ? (
-          <span className="clock" title="Simulated demo clock">
+          <span className="clock" title={ui.get().prefs.source === 'demo' ? 'Simulated demo clock' : 'Observation clock'}>
             <span className="small muted">{dateLabel(state.now)}</span> <strong className="mono">{shortClock(state.now)}</strong>
           </span>
         ) : null}
@@ -161,7 +164,7 @@ export function DemoBar() {
           }}
         >
           <option value="demo">Demo (simulated)</option>
-          <option value="live">Live (not connected)</option>
+          <option value="live">{configuredBridgeUrl() ? 'Live bridge' : 'Live (not connected)'}</option>
         </select>
       </label>
       {!live && ctrl ? (
@@ -224,7 +227,7 @@ export function DemoBar() {
         </>
       ) : (
         <span className="small muted demobar__desc">
-          No live bridge is configured tonight. Counts and states show as unknown rather than guessed. See docs/LIVE-INTEGRATION.md.
+          {configuredBridgeUrl() ? 'Read-only bridge. A fresh snapshot is required before activity is trusted.' : 'No live bridge configured. Agents remain visible; execution is unobserved. See docs/LIVE-INTEGRATION.md.'}
         </span>
       )}
       <MotionSelect />
@@ -295,7 +298,9 @@ export function SceneToolbar() {
 
 export function Legend() {
   const view = useUi((s) => s.view);
-  const items = view.mode === 'campus' ? (['dispatched', 'ready'] as const) : (['handoff', 'failed_audit', 'ready', 'dispatched'] as const);
+  const hq = view.mode === 'interior' && view.businessId === 'hermes-hq';
+  const ledger = view.mode === 'interior' && view.businessId === 'aster-ledger';
+  const items = view.mode === 'campus' || hq ? (['dispatched', 'ready'] as const) : ledger ? (['handoff', 'rejected', 'ready', 'dispatched'] as const) : (['handoff', 'failed_audit', 'ready', 'dispatched'] as const);
   const shapes: Record<string, string> = { dot: '●', diamond: '◆', plus: '✚', square: '■' };
   return (
     <div className="legend" aria-label="Legend">
@@ -306,7 +311,7 @@ export function Legend() {
             <span style={{ color: DOT_STYLE[k].color }} aria-hidden="true">
               {shapes[DOT_STYLE[k].shape]}
             </span>
-            {k === 'handoff' ? 'Research → Creation → Audit' : k === 'failed_audit' ? 'Fail → Fixes → Re-audit' : k === 'ready' ? 'Ready (not sent)' : 'From HQ'}
+            {k === 'handoff' ? 'Research → Delivery → Quality' : k === 'failed_audit' ? 'Quality → Delivery → Quality' : k === 'rejected' ? 'Rejected' : k === 'ready' ? 'Ready (not sent)' : hq ? 'Mandates to businesses' : 'From HQ'}
           </span>
         ))}
       </div>
