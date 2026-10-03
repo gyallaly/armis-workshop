@@ -1,5 +1,5 @@
 import { departmentForStage, loungeOf } from './config';
-import { normalizeEvent } from './normalize';
+import { normalizeEvent, normalizeSnapshot } from './normalize';
 import type {
   ActivityEvent,
   Artifact,
@@ -119,6 +119,9 @@ export function pruneTasks(state: WorkshopState, max: number = LIMITS.tasks): Wo
  * snapshot keeps its name and look but loses any status (=> unknown).
  */
 export function applySnapshot(state: WorkshopState, snap: Snapshot, connection: ConnectionState): WorkshopState {
+  const valid = normalizeSnapshot(snap);
+  if (!valid) return state;
+  snap = valid;
   // An older snapshot must not roll newer observed state back.
   if (state.lastEventAt !== null && snap.takenAt < state.lastEventAt) return { ...state, connection };
   const workers = { ...state.workers };
@@ -229,7 +232,7 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
   switch (e.type) {
     case 'task.created': {
       if (!e.taskId || s.tasks[e.taskId]) break;
-      const stage = (p.stage as TaskStage) ?? 'research';
+      const stage = (p.stage as TaskStage) ?? 'unknown';
       const task: Task = {
         id: e.taskId,
         businessId: e.businessId,
@@ -242,7 +245,8 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
         findings: [],
         artifactIds: [],
         repairCount: 0,
-        maxRepairs: Number(p.maxRepairs ?? 2),
+        maxRepairs: Number(p.maxRepairs ?? 0),
+        unreportedFields: [p.stage === undefined ? 'department stage' : null, p.maxRepairs === undefined ? 'repair policy' : null].filter((v): v is string => v !== null),
         eligibleCapacity: (p.eligibleCapacity as string[]) ?? [],
         createdAt: e.sourceTs,
         updatedAt: e.sourceTs,
@@ -254,13 +258,13 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
     case 'task.assigned': {
       const task = e.taskId ? s.tasks[e.taskId] : undefined;
       if (!task || !e.workerId) break;
-      const attemptId = e.attemptId ?? `${e.id}:attempt`;
-      if (!s.attempts[attemptId]) {
+      const attemptId = e.attemptId;
+      if (attemptId && !s.attempts[attemptId]) {
         const attempt: Attempt = {
           id: attemptId,
           taskId: task.id,
           workerId: e.workerId,
-          sessionId: e.sessionId ?? 'unknown-session',
+          sessionId: e.sessionId,
           stage: (p.stage as TaskStage) ?? task.stage,
           startedAt: e.sourceTs,
           provider: p.provider as ProviderRef | undefined,
@@ -269,7 +273,7 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
       }
       if (isFresh(clock, `task:${task.id}`, e.sourceTs)) {
         clock[`task:${task.id}`] = e.sourceTs;
-        const attemptIds = task.attemptIds.includes(attemptId) ? task.attemptIds : [...task.attemptIds, attemptId];
+        const attemptIds = !attemptId || task.attemptIds.includes(attemptId) ? task.attemptIds : [...task.attemptIds, attemptId];
         s.tasks = {
           ...s.tasks,
           [task.id]: { ...task, assignedWorkerId: e.workerId, status: 'in_progress', attemptIds, updatedAt: e.sourceTs, heldReason: undefined },
@@ -359,7 +363,7 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
       const att = e.attemptId ? s.attempts[e.attemptId] : undefined;
       if (!att) break;
       if (att.outcome) break; // outcomes are write-once; a late duplicate cannot change them
-      s.attempts = { ...s.attempts, [att.id]: { ...att, endedAt: e.sourceTs, outcome: p.outcome as AttemptOutcome } };
+      s.attempts = { ...s.attempts, [att.id]: { ...att, endedAt: e.sourceTs, outcome: p.outcome as AttemptOutcome, provider: (p.provider as ProviderRef | undefined) ?? att.provider } };
       break;
     }
     case 'audit.findings': {
@@ -529,6 +533,7 @@ function putRedirect(state: WorkshopState, r: RedirectRequest): WorkshopState {
 }
 
 const STAGE_LABEL: Record<string, string> = {
+  unknown: 'Stage unreported',
   research: 'Research',
   creation: 'Creation',
   audit: 'Audit',

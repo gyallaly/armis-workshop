@@ -1,10 +1,14 @@
 # Read-only local Live integration
 
+## Current installation supersedes the previous source binding
+
+The current installation binds the actual `armis-setup-runtime` journal with ten observed installed roles and recorded Operations → worker → review tasks. It no longer uses the single default Hermes-session binding described in the historical section below. Optional authenticated `/api/evidence` separately reads sanitized setup workflow/review/actual-model receipts and authorized read-only Uditus sources. See [MAC-LIVE-ACTIVATION.md](MAC-LIVE-ACTIVATION.md) for exact sources, producer/reader gaps, migration handoff and recovery. No administration policy update or demonstration starts during this activation.
+
 ## What exists
 
 The pixel-art renderer is unchanged in design. Live is the default source, with no Demo identities or saved Demo tasks. `LiveAdapter` implements `WorkshopAdapter` over same-origin SSE. Redirect and controls are always false. Demo remains a separate, explicit simulation source used by regression tests; it is not opened for the user.
 
-A single native Node HTTP service serves the production `dist/` manifest and exactly two read-only API paths: `/api/health` and `/api/events`. It binds **127.0.0.1 only**, requires the exact Host, rejects foreign Origin/fetch-site and non-GET methods, and sets no permissive CORS. A top-level same-origin browser navigation establishes a random HttpOnly SameSite=Strict session cookie; no token enters frontend code, URLs or localStorage. The cookie is short-lived in the service's memory and invalidated when the service stops. No execution, terminal, filesystem, logs, raw databases or mutation endpoint exists. Static assets are an immutable startup allowlist; source maps are not served. Local OS users remain trusted: this is not isolation from another process running as the same Unix user.
+A single native Node HTTP service serves the production `dist/` manifest and three read-only API paths: `/api/health`, `/api/events`, and `/api/evidence`. It binds **127.0.0.1 only**, requires the exact Host, rejects foreign Origin/fetch-site and non-GET methods, and sets no permissive CORS. A top-level same-origin browser navigation establishes a random HttpOnly SameSite=Strict session cookie; no token enters frontend code, URLs or localStorage. The cookie is short-lived in the service's memory and invalidated when the service stops. No execution, terminal, filesystem, logs, raw databases or mutation endpoint exists. Static assets are an immutable startup allowlist; source maps are not served. Local OS users remain trusted: this is not isolation from another process running as the same Unix user.
 
 ## Actual source on the Ubuntu Mac mini
 
@@ -13,7 +17,7 @@ Two mutually exclusive opt-in sources are supported:
 1. `ARMIS_VIEWER_DB`: an existing sanitized Armis `viewer_events` SQLite journal, contract version 1. This does not start an execution host or initialize a dispatcher database.
 2. `ARMIS_HERMES_DB` plus `ARMIS_HERMES_SESSION_ID`: a read-only, explicitly bound Hermes default-profile session. This source selects only session identifiers/configured model label and tool-call identifiers, names and timestamps. SQLite extracts tool names; prompt, arguments, result content, reasoning and credentials are never selected for serialization. Unknown tool names become `unknown_tool`.
 
-The running integration is source 2, bound to this dashboard-connection Slack session: `20261002_162105_235c1110`. Its task grouping is explicitly an **integration test**, not a production mandate and not a replay fixture. Worker `hermes.default` is installed/observed but **not bound to an Armis role**. The viewer does not quietly relabel it as `armis.ceo`. Tool requested/returned timestamps are genuine runtime records; a returned tool or completed process is not accepted business success. Outcome stays unobserved. No review acceptance, business result, handoff or Ready transition is inferred from private messages or silence.
+The previous October 2 installation was source 2, bound to this dashboard-connection Slack session: `20261002_162105_235c1110`. Its task grouping is explicitly an **integration test**, not a production mandate and not a replay fixture. Worker `hermes.default` is installed/observed but **not bound to an Armis role**. The viewer does not quietly relabel it as `armis.ceo`. Tool requested/returned timestamps are genuine runtime records; a returned tool or completed process is not accepted business success. Outcome stays unobserved. No review acceptance, business result, handoff or Ready transition is inferred from private messages or silence.
 
 **Observed:** tool request/return metadata for the explicitly bound session, session/attempt/task identities, source timestamps, configured/requested model label. Source saves may lag execution; metadata is not token-stream visibility.
 

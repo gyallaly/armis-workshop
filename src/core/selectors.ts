@@ -1,4 +1,4 @@
-import { BUSINESS_BY_ID, DEPARTMENT_BY_ID, departmentForStage } from './config';
+import { BUSINESS_BY_ID, DEPARTMENT_BY_ID, departmentForStage, loungeOf } from './config';
 import type { Availability, Millis, ProviderCapacity, Task, Worker, WorkerState, WorkerStatus, WorkshopState } from './types';
 
 /** A worker not heard from for this long is shown as stale, not as working. */
@@ -20,7 +20,7 @@ export interface DisplayStatus {
  */
 export function displayStatus(state: WorkshopState, worker: Worker): DisplayStatus {
   const st = state.statuses[worker.id];
-  if (!st) return { state: 'unknown', reported: null, stale: true, departmentId: worker.homeDepartmentId };
+  if (!st) return { state: 'unknown', reported: null, stale: true, departmentId: loungeOf(worker.businessId) };
   const disconnected = state.connection === 'disconnected' || state.connection === 'reconnecting';
   const tooOld = state.now - st.lastObservedAt > STALE_AFTER_MS;
   const stale = disconnected || (tooOld && st.state !== 'offline');
@@ -28,7 +28,7 @@ export function displayStatus(state: WorkshopState, worker: Worker): DisplayStat
     state: stale ? 'unknown' : st.state,
     reported: st.state,
     stale,
-    departmentId: st.departmentId,
+    departmentId: st.state === 'idle' || st.state === 'offline' ? loungeOf(worker.businessId) : st.departmentId,
     status: st,
   };
 }
@@ -168,7 +168,7 @@ export function elapsed(now: Millis, since: Millis | undefined): string {
 /** Which workers draw on a capacity scope right now (shared, not per-worker). */
 export function capacityConsumers(state: WorkshopState, capacityId: string): Worker[] {
   return Object.values(state.statuses)
-    .filter((s) => s.provider?.capacityId === capacityId && (s.state === 'active' || s.state === 'waiting_provider'))
+    .filter((s) => s.provider?.capacityId === capacityId && state.workers[s.workerId] && ['active', 'waiting_provider'].includes(displayStatus(state, state.workers[s.workerId]!).state))
     .map((s) => state.workers[s.workerId])
     .filter((w): w is Worker => Boolean(w));
 }

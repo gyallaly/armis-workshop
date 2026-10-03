@@ -8,6 +8,7 @@ import { motionEnabled, store, ui, useUi, useWorkshop } from '../ui/store';
 import { ActorSystem } from './actors';
 import { buildCampus, type CampusScene, type Pt, pointInPoly, type SceneAssets } from './campus';
 import { Camera } from './camera';
+import { placeLabels } from './labels';
 import { buildInterior, type InteriorScene } from './interior';
 import { DOT_STYLE, drawDots, drawGuide, type PlacedDot } from './traffic';
 import { CapacityChip } from '../ui/CapacityPanel';
@@ -114,6 +115,15 @@ export function SceneView() {
     return () => clearTimeout(t);
   }, [viewKey]);
 
+  // A simulated position is never a last-known live observation.
+  useEffect(() => {
+    const sc = scenesRef.current;
+    if (!sc) return;
+    for (const [id, scene] of sc.interiors) sc.actors.set(id, new ActorSystem(scene));
+    lastDotPos.current.clear();
+    placedRef.current = [];
+  }, [prefs.source]);
+
   // ------------------------------------------------------- render loop
   useEffect(() => {
     if (!ready) return;
@@ -132,7 +142,7 @@ export function SceneView() {
       canvas.height = Math.round(r.height * dpr);
       canvas.style.width = `${r.width}px`;
       canvas.style.height = `${r.height}px`;
-      cam.resize(r.width, r.height);
+      cam.resize(r.width, r.height, (wrap.parentElement?.querySelector<HTMLElement>('.stage__bottom')?.offsetHeight ?? 60) + 18);
     };
     resize();
     const ro = new ResizeObserver(resize);
@@ -171,7 +181,7 @@ export function SceneView() {
       if (viewKey === 'campus') {
         const campus = sc.campus;
         ctx.drawImage(campus.base, 0, 0);
-        campus.drawAmbient(ctx, now, motion);
+        campus.drawAmbient(ctx, now, motion, u.prefs.taskFlow);
         // hover / selection outline on buildings
         for (const b of campus.buildings) {
           const on = (hv?.kind === 'building' && hv.id === b.id) || (u.selection?.kind === 'building' && u.selection.id === b.id);
@@ -217,8 +227,8 @@ export function SceneView() {
         if (selId && u.follow && !cam.animating) {
           const p = actors.screenOf(selId);
           if (p) {
-            cam.cx += (p[0] - cam.cx) * 0.08;
-            cam.cy += (p[1] - 12 - cam.cy) * 0.08;
+            cam.cx += (p[0] - cam.cx) * (motion ? 0.08 : 1);
+            cam.cy += (p[1] - 12 - cam.cy) * (motion ? 0.08 : 1);
           }
         }
       }
@@ -234,14 +244,27 @@ export function SceneView() {
         ctx.fillRect(0, 0, viewKey === 'campus' ? sc.campus.width : interiorOf(sc, viewKey).width, viewKey === 'campus' ? sc.campus.height : interiorOf(sc, viewKey).height);
       }
       placedRef.current = drawDots(ctx, dots, t, motion, selDot);
+      const retained = new Set(s.traffic.map((dot) => dot.id));
+      for (const id of lastDotPos.current.keys()) if (!retained.has(id)) lastDotPos.current.delete(id);
       for (const p of placedRef.current) lastDotPos.current.set(p.dot.id, p.at);
 
       // position DOM overlays
       const ov = overlayRef.current;
       if (ov) {
-        ov.querySelectorAll<HTMLElement>('[data-ax]').forEach((el) => {
+        const elements = Array.from(ov.querySelectorAll<HTMLElement>('[data-ax]'));
+        const bottom = wrap.parentElement?.querySelector<HTMLElement>('.stage__bottom')?.offsetHeight ?? 60;
+        const bounds = { x: 12, y: 18, width: Math.max(1, cam.viewW - 24), height: Math.max(1, cam.viewH - bottom - 36) };
+        ov.dataset.compact = cam.percent < 90 || cam.viewW < 1000 ? 'true' : 'false';
+        const obstacles = u.prefs.minimap && cam.viewW > 900 ? [{ x: 12, y: cam.viewH - 188, width: 180, height: 124 }] : [];
+        const placements = placeLabels(elements.map((el, i) => {
           const [x, y] = cam.toScreen(Number(el.dataset.ax), Number(el.dataset.ay));
-          el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+          const child = el.firstElementChild as HTMLElement;
+          return { id: String(i), x, y, width: child.offsetWidth, height: child.offsetHeight };
+        }), bounds, obstacles);
+        elements.forEach((el, i) => {
+          const r = placements.get(String(i));
+          el.style.visibility = r ? 'visible' : 'hidden';
+          if (r) el.style.transform = 'translate(' + Math.round(r.x) + 'px, ' + Math.round(r.y) + 'px)';
         });
         ov.querySelectorAll<HTMLElement>('[data-track]').forEach((el) => {
           const [kind, id] = el.dataset.track!.split('|') as [string, string];
@@ -536,11 +559,12 @@ function BuildingLabel({ id, anchor, hovered, onEnter, onHover, extra }: { id: s
           {live ? (
             <>
               <span>{c.active} active</span>
+              <span>{c.idle} resting</span>
               <span>{c.queued + c.waitingProvider} queued</span>
               {c.held ? <span className="warn">{c.held} held</span> : null}
               {c.failed ? <span className="bad">{c.failed} failed</span> : null}
               {c.unknown ? <span className="muted">{c.unknown} unknown</span> : null}
-              <span className="muted">roster {c.roster}</span>
+              <span className="muted">{c.roster} agents</span>
             </>
           ) : (
             <span className="muted">status unknown · no telemetry / not connected</span>

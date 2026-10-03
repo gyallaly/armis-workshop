@@ -66,6 +66,16 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map(server => new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()))));
   rmSync(dir, { recursive: true, force: true });
 });
+it('additional evidence endpoint remains same-origin authenticated and reports absent sources without inventing data',async()=>{
+ const {port}=await start();
+ expect((await get(port,'/api/evidence')).status).toBe(401);
+ const cookie=await session(port);
+ const response=await get(port,'/api/evidence',{Cookie:cookie});
+ expect(response.status).toBe(200);
+ expect(JSON.parse(response.body)).toMatchObject({setup:{state:'unavailable'},uditus:{state:'unavailable'}});
+ expect((await get(port,'/api/evidence',{Cookie:cookie,Origin:'https://foreign.example'})).status).toBe(403);
+ expect((await get(port,'/api/evidence',{Cookie:cookie},'POST')).status).toBe(405);
+});
 async function start(dbPath?: string) {
   const server = createViewerServer({ dist: dir, dbPath, port: 0 });
   servers.push(server);

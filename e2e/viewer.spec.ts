@@ -28,14 +28,14 @@ test('campus -> business -> worker -> back to campus', async ({ page }) => {
   await open(page);
   await page.getByRole('button', { name: /Enter Uditus/ }).click();
   await expect(page.getByRole('navigation', { name: 'Breadcrumb' }).getByText('Uditus')).toBeVisible();
-  await expect(page.getByRole('group', { name: 'Audit department' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Quality department' })).toBeVisible();
   await expect(page.getByRole('group', { name: 'Lounge department' })).toBeVisible();
   // roster lists the persistent identities
   const roster = panel(page).locator('.roster__btn');
-  await expect(roster).toHaveCount(7);
-  await roster.filter({ hasText: 'Iris' }).click();
-  await expect(panel(page).getByRole('heading', { name: 'Iris' })).toBeVisible();
-  await expect(panel(page).getByText('w-iris')).toBeVisible();
+  await expect(roster).toHaveCount(8);
+  await roster.filter({ hasText: 'Reviewer' }).click();
+  await expect(panel(page).getByRole('heading', { name: 'Reviewer' })).toBeVisible();
+  await expect(panel(page).getByText('uditus.reviewer')).toBeVisible();
   await page.getByRole('button', { name: 'Campus' }).click();
   await expect(page.getByRole('button', { name: /Enter Uditus/ })).toBeVisible();
 });
@@ -142,7 +142,7 @@ test('keyboard: scene is focusable and Escape returns to campus', async ({ page 
   await open(page);
   await page.getByRole('button', { name: /Enter Etsy Studio/ }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('group', { name: 'Fixes department' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Delivery department' })).toBeVisible();
   await page.getByRole('application').focus();
   await page.keyboard.press('+');
   await page.keyboard.press('Escape');
@@ -169,7 +169,7 @@ test('Aster Ledger: DEMO/PAPER labelled, paper book, venue board, news drawer, n
   const label = page.getByRole('button', { name: /Enter Aster Ledger/ });
   await expect(label.getByText('DEMO / PAPER')).toBeVisible();
   await label.click();
-  await expect(page.getByRole('group', { name: 'Trader Watch department' })).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Delivery department' })).toBeVisible();
   const p = panel(page);
   await expect(p.getByText('DEMO · PAPER TRADING')).toBeVisible();
   await expect(p.getByText('Start bankroll')).toBeVisible();

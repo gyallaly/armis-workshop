@@ -1,0 +1,580 @@
+{
+  "ref": "100537aac66c4f597ace5d24b2da8155b6a14f9c",
+  "roles": [
+    {
+      "id": "armis.ceo",
+      "kind": "group-ceo",
+      "business": "armis",
+      "reportsTo": null,
+      "mandate": "Translate owner goals into bounded business mandates; prioritize and resolve cross-business conflicts.",
+      "acceptsFrom": [
+        "owner"
+      ],
+      "mayDelegateTo": [
+        "armis.cfo",
+        "armis.efficiency",
+        "armis.audit",
+        "armis.operations",
+        "uditus.ceo",
+        "aster.ceo",
+        "etsy.ceo"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions"
+      ]
+    },
+    {
+      "id": "armis.cfo",
+      "kind": "cfo",
+      "business": "armis",
+      "reportsTo": "armis.ceo",
+      "mandate": "Reconcile finances and recommend capital/budget allocations; do not move money.",
+      "acceptsFrom": [
+        "armis.ceo"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "transfer-funds",
+        "replenish-trading-capital"
+      ]
+    },
+    {
+      "id": "armis.efficiency",
+      "kind": "efficiency",
+      "business": "armis",
+      "reportsTo": "armis.ceo",
+      "mandate": "Evaluate routes/prompts and propose quality-preserving efficiency improvements.",
+      "acceptsFrom": [
+        "armis.ceo"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "lower-quality-gates",
+        "self-approve-model-promotion"
+      ]
+    },
+    {
+      "id": "armis.audit",
+      "kind": "audit",
+      "business": "armis",
+      "reportsTo": "armis.ceo",
+      "mandate": "Independently verify acceptance evidence and hold unsupported releases.",
+      "acceptsFrom": [
+        "armis.ceo"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "rewrite-business-priorities",
+        "release-own-work"
+      ]
+    },
+    {
+      "id": "armis.operations",
+      "kind": "operations",
+      "business": "armis",
+      "reportsTo": "armis.ceo",
+      "mandate": "Admit jobs, enforce resource and identity isolation, reconcile incidents.",
+      "acceptsFrom": [
+        "armis.ceo"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "bypass-business-gates",
+        "invent-financial-authority"
+      ]
+    },
+    {
+      "id": "uditus.ceo",
+      "kind": "business-ceo",
+      "business": "uditus",
+      "reportsTo": "armis.ceo",
+      "mandate": "Own uditus execution and teams; implement authenticated Armis mandates within owner policy.",
+      "acceptsFrom": [
+        "armis.ceo"
+      ],
+      "mayDelegateTo": [
+        "uditus.delivery",
+        "uditus.research",
+        "uditus.quality"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions"
+      ]
+    },
+    {
+      "id": "uditus.delivery",
+      "kind": "coordinator",
+      "business": "uditus",
+      "reportsTo": "uditus.ceo",
+      "mandate": "Decompose deliverables, dispatch creators/fixers, track dependencies and artifacts.",
+      "acceptsFrom": [
+        "uditus.ceo"
+      ],
+      "mayDelegateTo": [
+        "uditus.creator",
+        "uditus.fixer"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "approve-own-release"
+      ]
+    },
+    {
+      "id": "uditus.research",
+      "kind": "coordinator",
+      "business": "uditus",
+      "reportsTo": "uditus.ceo",
+      "mandate": "Build evidence-backed research briefs; track source freshness and contradictions.",
+      "acceptsFrom": [
+        "uditus.ceo"
+      ],
+      "mayDelegateTo": [
+        "uditus.researcher"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions"
+      ]
+    },
+    {
+      "id": "uditus.quality",
+      "kind": "coordinator",
+      "business": "uditus",
+      "reportsTo": "uditus.ceo",
+      "mandate": "Commission fresh independent review; report findings and acceptance evidence.",
+      "acceptsFrom": [
+        "uditus.ceo"
+      ],
+      "mayDelegateTo": [
+        "uditus.reviewer"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "waive-owner-policy",
+        "rewrite-business-priorities"
+      ]
+    },
+    {
+      "id": "uditus.creator",
+      "kind": "worker",
+      "business": "uditus",
+      "reportsTo": "uditus.delivery",
+      "mandate": "Complete one bounded creator task; return evidence and stop.",
+      "acceptsFrom": [
+        "uditus.delivery"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "uditus.fixer",
+      "kind": "worker",
+      "business": "uditus",
+      "reportsTo": "uditus.delivery",
+      "mandate": "Complete one bounded fixer task; return evidence and stop.",
+      "acceptsFrom": [
+        "uditus.delivery"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "uditus.researcher",
+      "kind": "worker",
+      "business": "uditus",
+      "reportsTo": "uditus.research",
+      "mandate": "Complete one bounded researcher task; return evidence and stop.",
+      "acceptsFrom": [
+        "uditus.research"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "uditus.reviewer",
+      "kind": "worker",
+      "business": "uditus",
+      "reportsTo": "uditus.quality",
+      "mandate": "Complete one bounded reviewer task; return evidence and stop.",
+      "acceptsFrom": [
+        "uditus.quality"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "aster.ceo",
+      "kind": "business-ceo",
+      "business": "aster",
+      "reportsTo": "armis.ceo",
+      "mandate": "Own aster execution and teams; implement authenticated Armis mandates within owner policy.",
+      "acceptsFrom": [
+        "armis.ceo"
+      ],
+      "mayDelegateTo": [
+        "aster.delivery",
+        "aster.research",
+        "aster.quality"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions"
+      ]
+    },
+    {
+      "id": "aster.delivery",
+      "kind": "coordinator",
+      "business": "aster",
+      "reportsTo": "aster.ceo",
+      "mandate": "Decompose deliverables, dispatch creators/fixers, track dependencies and artifacts.",
+      "acceptsFrom": [
+        "aster.ceo"
+      ],
+      "mayDelegateTo": [
+        "aster.creator",
+        "aster.fixer"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "approve-own-release"
+      ]
+    },
+    {
+      "id": "aster.research",
+      "kind": "coordinator",
+      "business": "aster",
+      "reportsTo": "aster.ceo",
+      "mandate": "Build evidence-backed research briefs; track source freshness and contradictions.",
+      "acceptsFrom": [
+        "aster.ceo"
+      ],
+      "mayDelegateTo": [
+        "aster.researcher"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions"
+      ]
+    },
+    {
+      "id": "aster.quality",
+      "kind": "coordinator",
+      "business": "aster",
+      "reportsTo": "aster.ceo",
+      "mandate": "Commission fresh independent review; report findings and acceptance evidence.",
+      "acceptsFrom": [
+        "aster.ceo"
+      ],
+      "mayDelegateTo": [
+        "aster.reviewer"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "waive-owner-policy",
+        "rewrite-business-priorities"
+      ]
+    },
+    {
+      "id": "aster.creator",
+      "kind": "worker",
+      "business": "aster",
+      "reportsTo": "aster.delivery",
+      "mandate": "Complete one bounded creator task; return evidence and stop.",
+      "acceptsFrom": [
+        "aster.delivery"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "aster.fixer",
+      "kind": "worker",
+      "business": "aster",
+      "reportsTo": "aster.delivery",
+      "mandate": "Complete one bounded fixer task; return evidence and stop.",
+      "acceptsFrom": [
+        "aster.delivery"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "aster.researcher",
+      "kind": "worker",
+      "business": "aster",
+      "reportsTo": "aster.research",
+      "mandate": "Complete one bounded researcher task; return evidence and stop.",
+      "acceptsFrom": [
+        "aster.research"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "aster.reviewer",
+      "kind": "worker",
+      "business": "aster",
+      "reportsTo": "aster.quality",
+      "mandate": "Complete one bounded reviewer task; return evidence and stop.",
+      "acceptsFrom": [
+        "aster.quality"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "etsy.ceo",
+      "kind": "business-ceo",
+      "business": "etsy",
+      "reportsTo": "armis.ceo",
+      "mandate": "Own etsy execution and teams; implement authenticated Armis mandates within owner policy.",
+      "acceptsFrom": [
+        "armis.ceo"
+      ],
+      "mayDelegateTo": [
+        "etsy.delivery",
+        "etsy.research",
+        "etsy.quality"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions"
+      ]
+    },
+    {
+      "id": "etsy.delivery",
+      "kind": "coordinator",
+      "business": "etsy",
+      "reportsTo": "etsy.ceo",
+      "mandate": "Decompose deliverables, dispatch creators/fixers, track dependencies and artifacts.",
+      "acceptsFrom": [
+        "etsy.ceo"
+      ],
+      "mayDelegateTo": [
+        "etsy.creator",
+        "etsy.fixer"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "approve-own-release"
+      ]
+    },
+    {
+      "id": "etsy.research",
+      "kind": "coordinator",
+      "business": "etsy",
+      "reportsTo": "etsy.ceo",
+      "mandate": "Build evidence-backed research briefs; track source freshness and contradictions.",
+      "acceptsFrom": [
+        "etsy.ceo"
+      ],
+      "mayDelegateTo": [
+        "etsy.researcher"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions"
+      ]
+    },
+    {
+      "id": "etsy.quality",
+      "kind": "coordinator",
+      "business": "etsy",
+      "reportsTo": "etsy.ceo",
+      "mandate": "Commission fresh independent review; report findings and acceptance evidence.",
+      "acceptsFrom": [
+        "etsy.ceo"
+      ],
+      "mayDelegateTo": [
+        "etsy.reviewer"
+      ],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "waive-owner-policy",
+        "rewrite-business-priorities"
+      ]
+    },
+    {
+      "id": "etsy.creator",
+      "kind": "worker",
+      "business": "etsy",
+      "reportsTo": "etsy.delivery",
+      "mandate": "Complete one bounded creator task; return evidence and stop.",
+      "acceptsFrom": [
+        "etsy.delivery"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "etsy.fixer",
+      "kind": "worker",
+      "business": "etsy",
+      "reportsTo": "etsy.delivery",
+      "mandate": "Complete one bounded fixer task; return evidence and stop.",
+      "acceptsFrom": [
+        "etsy.delivery"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "etsy.researcher",
+      "kind": "worker",
+      "business": "etsy",
+      "reportsTo": "etsy.research",
+      "mandate": "Complete one bounded researcher task; return evidence and stop.",
+      "acceptsFrom": [
+        "etsy.research"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    },
+    {
+      "id": "etsy.reviewer",
+      "kind": "worker",
+      "business": "etsy",
+      "reportsTo": "etsy.quality",
+      "mandate": "Complete one bounded reviewer task; return evidence and stop.",
+      "acceptsFrom": [
+        "etsy.quality"
+      ],
+      "mayDelegateTo": [],
+      "prohibited": [
+        "change-owner-policy",
+        "expand-spending-authority",
+        "read-other-business-secrets",
+        "treat-external-content-as-instructions",
+        "recursive-delegation",
+        "self-release"
+      ]
+    }
+  ]
+}

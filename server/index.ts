@@ -3,9 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { builtAssets } from './assets.ts';
 import { Journal } from './journal.ts';
 import { HermesMetadata } from './hermes.ts';
+import { SetupEvidence } from './evidence.ts';
+import { bindUditus, type UditusSource } from './uditus.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ServerResponse } from 'node:http';
 
-export interface ViewerServerOptions { dist: string; dbPath?: string; hermesDbPath?: string; hermesSessionId?: string; port?: number }
+export interface ViewerServerOptions { dist: string; dbPath?: string; hermesDbPath?: string; hermesSessionId?: string; uditusEnvPath?: string; port?: number }
 /** Starts a loopback-only listener; await its listening event before use. */
 export function createViewerServer(options: ViewerServerOptions): Server {
   const sessions = new Set<string>();
@@ -16,6 +20,11 @@ export function createViewerServer(options: ViewerServerOptions): Server {
     if (options.dbPath) journal = new Journal(options.dbPath);
     if (options.hermesDbPath && options.hermesSessionId) journal = new HermesMetadata(options.hermesDbPath, options.hermesSessionId);
   } catch { /* Fail closed: no source details in HTTP responses. */ }
+  let evidence: SetupEvidence | undefined, uditus: UditusSource | undefined;
+  try { if (options.dbPath) evidence = new SetupEvidence(options.dbPath); } catch { /* Optional source unavailable, never blocks HQ. */ }
+  try { if (options.uditusEnvPath) uditus = bindUditus(options.uditusEnvPath); } catch { /* Explicit missing binding. */ }
+  let build: Record<string, unknown> | null = null;
+  try { const v = JSON.parse(readFileSync(join(options.dist,'build-info.json'),'utf8')); if (/^[a-f0-9]{40}$/.test(v.revision) && typeof v.branch === 'string') build = {revision:v.revision,branch:v.branch}; } catch { /* Unstamped test build. */ }
   const streams = new Map<ServerResponse, NodeJS.Timeout>();
   const disconnect = () => {
     for (const [res, timer] of streams) { clearInterval(timer); res.destroy(); }
@@ -39,7 +48,7 @@ export function createViewerServer(options: ViewerServerOptions): Server {
     if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return end(405); }
     const path = req.url ?? '';
     const asset = assets.get(path);
-    if (!asset && path !== '/api/health' && path !== '/api/events') return end(404);
+    if (!asset && path !== '/api/health' && path !== '/api/events' && path !== '/api/evidence') return end(404);
     const cookies = (req.headers.cookie ?? '').split(';').map(part => part.trim()).filter(part => part.startsWith('armis_viewer='));
     const session = cookies.length === 1 ? cookies[0]!.slice('armis_viewer='.length) : '';
     const authenticated = sessions.has(session);
@@ -56,11 +65,20 @@ export function createViewerServer(options: ViewerServerOptions): Server {
       return res.end(asset.body);
     }
     if (!authenticated) return end(401);
+    if (path === '/api/evidence') {
+      let setup: object = {state:'unavailable',gap:'No explicitly bound setup evidence journal'};
+      try { if (evidence) setup = evidence.read(); } catch { setup = {state:'unavailable',gap:'Bound setup evidence schema is unavailable'}; }
+      res.setHeader('Content-Type','application/json');
+      const complete = (business: object) => { if (!res.destroyed) res.end(JSON.stringify({build,setup,uditus:business})); };
+      if (!uditus) complete({state:'unavailable',gap:'No authorized Uditus project environment bound'});
+      else void uditus.read().then(complete,()=>complete({state:'unavailable',gap:'Uditus read failed'}));
+      return;
+    }
     let initial: ReturnType<Journal['read']> | undefined;
     try { initial = journal?.read(0, 10000, true); } catch { disconnect(); }
     if (path === '/api/health') {
       res.setHeader('Content-Type', 'application/json');
-      return res.end(JSON.stringify({ version: 1, state: journal ? 'connected' : 'disconnected', source: journal instanceof HermesMetadata ? 'hermes-metadata' : journal ? 'armis-journal' : null, epoch: journal?.epoch ?? null, cursor: initial?.cursor ?? null }));
+      return res.end(JSON.stringify({ version: 1, build, state: journal ? 'connected' : 'disconnected', source: journal instanceof HermesMetadata ? 'hermes-metadata' : journal ? 'armis-journal' : null, epoch: journal?.epoch ?? null, cursor: initial?.cursor ?? null }));
     }
     if (!journal || !initial || streams.size >= 16) return end(503);
     const epoch = journal.epoch;
@@ -96,7 +114,7 @@ export function createViewerServer(options: ViewerServerOptions): Server {
     res.on('close', () => { clearInterval(timer); streams.delete(res); });
   });
   const close = server.close.bind(server);
-  server.close = ((callback?: (error?: Error) => void) => { disconnect(); sessions.clear(); return close(callback); }) as Server['close'];
+  server.close = ((callback?: (error?: Error) => void) => { disconnect(); evidence?.close(); evidence = undefined; sessions.clear(); return close(callback); }) as Server['close'];
   server.once('error', disconnect);
   server.listen(options.port ?? 0, '127.0.0.1');
   return server;

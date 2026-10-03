@@ -13,7 +13,7 @@
 ## Data flow
 
 ```
- adapter (demo sim | disconnected live)
+ adapter (demo sim | configured read-only SSE | disconnected live)
    │  snapshot(), events[], connection(), tick(), reset()
    ▼
  WorkshopStore (src/ui/store.ts)  ── stamps receivedTs, batches per frame
@@ -53,6 +53,21 @@
   - Active workers sit at desks and their monitors light up.
   - Confirmed idle workers leave their desks for the lounge (coffee, sofa).
   - Waiting and failed workers stay at their desks with icons.
-  - Offline and unknown workers stand faded by the entrance, never animated.
+  - Confirmed offline workers occupy stable lounge spots with an offline indicator.
+  - Unobserved identities begin muted in their home lounge. Stale observations freeze the last known position; neither is presented as confirmed idle.
 - `traffic.ts` draws handoff dots from `task.handoff` events, using shape as well as colour.
 - **Reduced motion** (from the OS or the in-app setting) stops ambient animation, travelling dots and camera easing.
+
+## City integrity
+
+Interior navigation uses the same geometry footprints as rendering. Visibility-graph routes pass through actual door openings and avoid furniture; workers receive unique seats. Depth layers restore foreground walls, desks and monitors over actors while preserving finished decoration. Campus pedestrians likewise respect static foreground objects. Labels are placed against viewport margins, the toolbar, minimap and other labels; camera fit reserves that space.
+
+`tests/navigation.test.ts`, `tests/labels.test.ts` and `tests/boundaries.test.ts` cover movement, label placement and state boundaries. `e2e/city.spec.ts` verifies all five views at fit/minimum/maximum zoom at 1280 and 1440 widths. The organization view shows declared Control roles separately from simulated sessions.
+
+## Authoritative organization and occupancy
+
+`core/control-registry.json` pins the 29 declared roles from Control at `100537aac66c4f597ace5d24b2da8155b6a14f9c`. `organization.ts` maps those declarations to city business IDs; `config.ts` derives every character and its responsibility workspace. HQ has five roles, each company eight. Appearance preferences cannot replace canonical identities. Every identity has a unique stable lounge location and sufficient reachable workspace seating.
+
+`reconcileCity` checks declaration completeness, home ownership, observations, job/attempt associations and count totals. A failed worker can retain its completed attempt while the job is unassigned. Active workers must match current assignment. Organization panels expose these diagnostics.
+
+`LiveBridgeAdapter` consumes an explicitly configured sanitized SSE endpoint. Only a validated snapshot establishes a connection; reconnects require another snapshot before events are accepted. The adapter rejects unknown identities and cross-company observations, stamps arrival timestamps locally, and offers no control capability. Transport tests use simulated fixtures; actual Mac mini connectivity remains unverified until an endpoint is supplied.

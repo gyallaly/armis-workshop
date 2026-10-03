@@ -1,0 +1,15 @@
+.org { margin: 0 0 16px; border-block: 1px solid var(--line); }
+.org > summary { cursor: pointer; padding: 12px 0; font-weight: 700; }
+.org > summary span { display: block; margin-top: 4px; color: var(--muted); font: 12px var(--mono); font-weight: 400; }
+.org__body { padding-bottom: 12px; }
+.org__body p { font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.org__owner { color: var(--accent); }
+.org__tree, .org__tree ul { list-style: none; padding: 0; margin: 8px 0; }
+.org__tree ul { margin-left: 12px; padding-left: 10px; border-left: 1px solid var(--line); }
+.org__role summary { cursor: pointer; padding: 6px 0; font-size: 12px; }
+.org__role summary span { display: block; color: var(--muted); font-size: 11px; margin: 3px 0 0 14px; text-transform: capitalize; }
+.org__body dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 5px 8px; font-size: 11px; }
+.org__body dt { color: var(--muted); }
+.org__body dd { margin: 0; overflow-wrap: anywhere; }
+.org__telemetry { border-top: 1px solid var(--line); padding-top: 12px; }
+.org summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

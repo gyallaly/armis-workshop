@@ -1,5 +1,6 @@
 import type { ActivityEvent, Snapshot, Worker, TaskStage } from '../../core/types';
 import { initialState, reduce } from '../../core/reducer';
+import { ROSTER } from '../../core/config';
 
 export const BUSINESS_MAP: Record<string, string> = { armis: 'hermes-hq', uditus: 'uditus', aster: 'aster-ledger', etsy: 'etsy-studio' };
 const DIRECTORS: Record<string, string> = { 'armis.ceo': 'Managing Director — Hermes', 'armis.cfo': 'Finance Director', 'armis.efficiency': 'Efficiency Director', 'armis.audit': 'Audit Director', 'armis.operations': 'Operations Director' };
@@ -11,7 +12,7 @@ export interface Observation {
   businessId: string | null; workerId: string | null; taskId: string | null; attemptId: string | null; sessionId: string | null; mandateId: string | null;
   data: Record<string, unknown>;
 }
-const secret = /(?:sk-|AIza|gh[pousr]_|Bearer\s|token[=:]|password[=:]|cookie[=:]|-----BEGIN|eyJ[A-Za-z0-9_-]+\.)/i;
+const secret = /(?:\bsk-|AIza|gh[pousr]_|Bearer\s|token[=:]|password[=:]|cookie[=:]|-----BEGIN|eyJ[A-Za-z0-9_-]+\.)/i;
 function id(v: unknown): v is string { return typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/.test(v) && !secret.test(v) && !['__proto__','constructor','prototype'].includes(v); }
 function n(v: unknown): v is number { return typeof v === 'number' && Number.isSafeInteger(v) && v >= 0; }
 function roleBusiness(role: string): string | undefined {
@@ -61,8 +62,9 @@ export function observedWorker(role: string): Worker {
   const name = role === 'hermes.default' ? 'Hermes — default profile' : DIRECTORS[role] ?? (role.endsWith('.ceo') ? `CEO of ${business === 'uditus' ? 'Uditus' : business === 'aster' ? 'Aster Ledger' : 'Etsy Business'}` : role.split('.').at(-1)!);
   // Fixed appearance from stable technical identity, not Demo preferences.
   const shirt = ['#6b7a8f','#2f3b52','#9c4a3c','#4c3a73'][Array.from(role).reduce((a,c) => a + c.charCodeAt(0), 0) % 4]!;
-  const dept = business === 'armis' ? (role === 'armis.efficiency' ? 'capacity' : 'dispatch') : role.endsWith('reviewer') || role.endsWith('quality') ? 'audit' : role.endsWith('fixer') ? 'fixes' : role.endsWith('researcher') || role.endsWith('research') ? 'research' : 'creation';
-  return { id: role, name, role: name, businessId, installation: {defined: true, installed: null, observed: true, roleBinding: role === 'hermes.default' ? 'unbound' : 'unknown', source: role === 'hermes.default' ? 'Explicitly bound default-profile session metadata' : 'Armis observed role registry'}, homeDepartmentId: `${businessId}:${dept}`, appearance: { skin: '#c68c5f', hair: '#171313', hairStyle: 'short', shirt, pants: '#1d2230', accessory: 'none' } };
+  const declared = ROSTER.find(w => w.id === role);
+  const dept = business === 'armis' ? (role === 'armis.auditor' ? 'quality' : role === 'armis.finance-analyst' ? 'finance' : ['armis.evaluator','armis.prompt-engineer'].includes(role) ? 'efficiency' : 'operations') : role.endsWith('reviewer') || role.endsWith('quality') ? 'quality' : role.endsWith('researcher') || role.endsWith('research') ? 'research' : 'delivery';
+  return { id: role, name, role: name, businessId, installation: {defined: true, installed: null, observed: true, roleBinding: role === 'hermes.default' ? 'unbound' : 'unknown', source: role === 'hermes.default' ? 'Explicitly bound default-profile session metadata' : 'Armis observed role registry'}, homeDepartmentId: declared?.homeDepartmentId ?? `${businessId}:${dept}`, reportsTo: declared?.reportsTo ?? (role === 'armis.auditor' ? 'armis.audit' : role === 'armis.operator' ? 'armis.operations' : undefined), mandate: declared?.mandate, appearance: { skin: '#c68c5f', hair: '#171313', hairStyle: 'short', shirt, pants: '#1d2230', accessory: 'none' } };
 }
 function stageFor(e: Observation): TaskStage {
   if (e.type.startsWith('review.')) return 'audit';
@@ -93,10 +95,11 @@ export function mapObservation(value: unknown): ActivityEvent[] {
   if (['task.waiting','task.held','task.failed','task.completed'].includes(e.type) && e.taskId) {
     const setupAccepted = e.source === 'armis-setup-runtime' && e.type === 'task.completed' && e.data.accepted === true;
     const status = setupAccepted ? 'ready' : e.type === 'task.waiting' ? (e.data.waitReason === 'provider' || e.data.waitReason === 'capacity' ? 'waiting_provider' : 'waiting_approval') : e.type === 'task.failed' ? 'failed' : 'held';
-    emit('task.status', { status, reason: setupAccepted ? 'Internal setup checks accepted; not released for external action.' : e.type === 'task.held' ? 'Held: authority-bound completion not verified; inspect trusted controller locally.' : e.type === 'task.completed' ? 'Recorded result; required acceptance not observed. Not released.' : 'Observed runtime wait or failure.' });
+    if (setupAccepted) emit('task.ready', {});
+    else emit('task.status', { status, reason: setupAccepted ? 'Internal setup checks accepted; not released for external action.' : e.type === 'task.held' ? 'Held: authority-bound completion not verified; inspect trusted controller locally.' : e.type === 'task.completed' ? 'Recorded result; required acceptance not observed. Not released.' : 'Observed runtime wait or failure.' });
   }
   if (['attempt.finished','attempt.expired'].includes(e.type)) {
-    if (e.attemptId) emit('attempt.finished', e.source === 'armis-setup-runtime' ? {provider, outcome: e.data.outcome === 'completed' ? 'accepted' : 'held'} : {}); // No outcome in v1. Never infer from exit.
+    if (e.attemptId) emit('attempt.finished', e.source === 'armis-setup-runtime' ? {provider, outcome: e.data.outcome === 'completed' ? 'completed' : 'aborted'} : {}); // No outcome in v1. Never infer from exit.
     if (e.workerId) emit('worker.state', { state: 'unknown', departmentId });
     if (e.taskId && e.data.state === 'held') emit('task.status', { status: 'held', reason: 'Held: missing authority-bound completion.' });
     if (e.taskId && e.data.state === 'ready') emit('task.status', { status: 'held', reason: 'Local ready recorded; required authority-bound acceptance not exposed by contract v1.' });

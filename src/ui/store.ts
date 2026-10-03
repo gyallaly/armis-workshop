@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { type AdapterSink, type WorkshopAdapter } from '../adapters/adapter';
 import { LiveAdapter } from '../adapters/live/liveAdapter';
 import { DemoAdapter } from '../adapters/demo/demoAdapter';
+import { configuredBridgeUrl, LiveBridgeAdapter } from '../adapters/live';
 import type { ScenarioId } from '../adapters/demo/sim';
 import { ROSTER } from '../core/config';
 import { type Action, initialState, reduce } from '../core/reducer';
@@ -53,7 +54,7 @@ export function loadRoster(): Worker[] {
   } catch {
     stored = {};
   }
-  const roster = ROSTER.map((w) => (stored[w.id] ? { ...w, name: stored[w.id]!.name, appearance: stored[w.id]!.appearance } : w));
+  const roster = ROSTER.map((w) => (stored[w.id] ? { ...w, appearance: stored[w.id]!.appearance } : w));
   save(ROSTER_KEY, Object.fromEntries(roster.map((w) => [w.id, { name: w.name, appearance: w.appearance }])));
   return roster;
 }

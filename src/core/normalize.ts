@@ -58,8 +58,8 @@ const dictionary = (parse: Parser, max: number): Parser => (v) => {
   return result;
 };
 
-const stage = enumOf('research', 'creation', 'audit', 'fixes', 'ready', 'feeds', 'rules', 'trader_watch', 'portfolio', 'rejected');
-const route = enumOf('hq', 'research', 'creation', 'audit', 'fixes', 'ready', 'feeds', 'rules', 'trader_watch', 'portfolio', 'rejected');
+const stage = enumOf('unknown', 'research', 'creation', 'audit', 'fixes', 'ready', 'feeds', 'rules', 'trader_watch', 'portfolio', 'rejected');
+const route = enumOf('unknown', 'hq', 'research', 'creation', 'audit', 'fixes', 'ready', 'feeds', 'rules', 'trader_watch', 'portfolio', 'rejected');
 const workerState = enumOf('active', 'idle', 'waiting_provider', 'waiting_approval', 'failed', 'offline', 'unknown');
 const taskStatus = enumOf('queued', 'in_progress', 'waiting_provider', 'waiting_approval', 'held', 'failed', 'ready', 'rejected');
 const provenance = enumOf('provider_reported', 'locally_measured', 'estimated', 'unknown');
@@ -106,7 +106,7 @@ const payloads: Record<ActivityEventType, Parser> = {
   'task.ready': object({}),
   'attempt.started': object({ stage: optional(stage), provider: optional(provider) }),
   'attempt.action': object({ action: text(), tool: optional(text()) }),
-  'attempt.finished': object({ outcome: optional(outcome) }),
+  'attempt.finished': object({ outcome: optional(outcome), provider: optional(provider) }),
   'audit.findings': object({ findings: list(finding) }),
   'criteria.updated': object({ criteria: list(criterion) }),
   'artifact.recorded': object({ artifact }),
@@ -121,18 +121,18 @@ const payloads: Record<ActivityEventType, Parser> = {
 };
 
 const worker = object({
-  id, name: text(128), businessId: id, role: text(), homeDepartmentId: id,
+  id, name: text(128), businessId: id, role: text(), homeDepartmentId: id, reportsTo: optional(nullable(id)), mandate: optional(text()),
   installation: optional(object({defined: boolean, installed: nullable(boolean), observed: boolean, roleBinding: enumOf('verified', 'unbound', 'unknown'), source: text()})),
   appearance: object({ skin: text(32), hair: text(32), hairStyle: enumOf('short', 'curly', 'long', 'bun', 'mohawk', 'bald', 'bob'), shirt: text(32), pants: text(32), accessory: optional(enumOf('glasses', 'headphones', 'beanie', 'none')) }),
 });
 const status = object({ workerId: id, state: workerState, departmentId: id, taskId: optional(id), attemptId: optional(id), sessionId: optional(id), provider: optional(provider), action: optional(text()), tool: optional(text()), stateSince: integer, lastObservedAt: integer });
 const task = object({
-  id, businessId: id, title: text(), acceptanceCriteria: list(criterion), stage, status: taskStatus,
+  id, parentTaskId: optional(id), unreportedFields: optional(list(text())), businessId: id, title: text(), acceptanceCriteria: list(criterion), stage, status: taskStatus,
   assignedWorkerId: optional(id), attemptIds: list(id, 1024), findings: list(finding), artifactIds: list(id),
   repairCount: integer, maxRepairs: integer, eligibleCapacity: list(id), heldReason: optional(text()), createdAt: integer, updatedAt: integer,
   mandateId: optional(id), source: optional(text()),
 });
-const attempt = object({ id, taskId: id, workerId: id, sessionId: id, stage, startedAt: integer, endedAt: optional(integer), outcome: optional(outcome), provider: optional(provider) });
+const attempt = object({ id, taskId: id, workerId: id, sessionId: optional(id), stage, startedAt: integer, endedAt: optional(integer), outcome: optional(outcome), provider: optional(provider) });
 const timeline = object({ eventId: id, at: integer, type: enumOf(...Object.keys(payloads)), businessId: id, workerId: optional(id), taskId: optional(id), text: text() });
 const snapshot = object({
   takenAt: integer, workers: list(worker, 256), statuses: list(status, 256), tasks: list(task, 120),
@@ -157,6 +157,7 @@ export function normalizeEvent(raw: unknown): ActivityEvent | null {
     if ((type.startsWith('worker.') || type === 'task.assigned' || type === 'attempt.action' || type.startsWith('redirect.')) && !event.workerId) return null;
     if ((type === 'attempt.started' || type === 'attempt.finished') && !event.attemptId) return null;
     event.payload = payloads[type](own(input, 'payload')) as Record<string, unknown>;
+    if (type === 'task.status' && event.payload.status === 'ready') return null;
     if (type === 'artifact.recorded' && (event.payload.artifact as Record<string, unknown>).taskId !== event.taskId) return null;
     return event;
   } catch { return null; }

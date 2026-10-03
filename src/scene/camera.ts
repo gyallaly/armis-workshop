@@ -13,6 +13,8 @@ export class Camera {
   viewW = 1;
   viewH = 1;
   fitScale = 1;
+  private topInset = 70;
+  private bottomInset = 90;
   private anim: { t0: number; dur: number; from: [number, number, number]; to: [number, number, number] } | null = null;
 
   constructor(
@@ -23,13 +25,14 @@ export class Camera {
     public maxMul = 4,
   ) {}
 
-  resize(w: number, h: number) {
+  resize(w: number, h: number, bottomInset = 90) {
     const first = this.viewW <= 1;
     const rel = this.fitScale ? this.scale / this.fitScale : 1;
     this.viewW = Math.max(1, w);
     this.viewH = Math.max(1, h);
+    this.bottomInset = bottomInset;
     const fr = this.fitRect;
-    this.fitScale = Math.min(this.viewW / (fr.x1 - fr.x0), this.viewH / (fr.y1 - fr.y0));
+    this.fitScale = Math.min(Math.max(1, this.viewW - 48) / (fr.x1 - fr.x0), Math.max(1, this.viewH - this.topInset - this.bottomInset) / (fr.y1 - fr.y0));
     if (first) this.reset();
     else {
       this.scale = this.fitScale * rel;
@@ -39,7 +42,7 @@ export class Camera {
 
   reset(animate = false, now = 0) {
     const fr = this.fitRect;
-    const to: [number, number, number] = [(fr.x0 + fr.x1) / 2, (fr.y0 + fr.y1) / 2, this.fitScale];
+    const to: [number, number, number] = [(fr.x0 + fr.x1) / 2, (fr.y0 + fr.y1) / 2 + (this.bottomInset - this.topInset) / (2 * this.fitScale), this.fitScale];
     if (animate) this.animateTo(to[0], to[1], to[2], 350, now);
     else [this.cx, this.cy, this.scale] = to;
   }

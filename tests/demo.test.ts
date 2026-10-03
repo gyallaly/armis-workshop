@@ -72,7 +72,7 @@ describe('demo simulation', () => {
     const { events, sim } = run(7, 'codex-reset', 4 * 60_000, 1000);
     const states = new Set(events.filter((e) => e.type === 'worker.state').map((e) => String(e.payload.state)));
     for (const s of ['active', 'idle', 'offline']) expect(states.has(s)).toBe(true);
-    expect(sim.truth.statuses['w-pip']?.state ?? 'unknown').not.toBe('active');
+    expect(sim.truth.statuses['uditus.fixer']?.state ?? 'unknown').not.toBe('active');
   });
 
   it('codex outage: gemini serves eligible work, codex-only work waits', () => {
@@ -114,7 +114,7 @@ describe('demo simulation', () => {
   it('redirect is acknowledged then applied or rejected', () => {
     const sim = new DemoSim(7, 'steady');
     sim.advanceTo(sim.loadAt);
-    const st = Object.values(sim.truth.statuses).find((s) => s.state === 'active' && s.taskId && s.workerId !== 'w-hermes' && s.workerId !== 'w-echo')!;
+    const st = Object.values(sim.truth.statuses).find((s) => s.state === 'active' && s.taskId && s.workerId !== 'armis.ceo' && s.workerId !== 'armis.operations')!;
     expect(st).toBeDefined();
     sim.redirect({ id: 'r1', workerId: st.workerId, taskId: st.taskId!, instruction: 'Prioritise contrast', state: 'requested', simulated: true, history: [] });
     sim.advanceTo(sim.t + 1500);

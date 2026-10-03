@@ -240,8 +240,8 @@ export class DemoSim {
     for (const c of Object.values(this.caps)) this.emitCap(c);
 
     for (const w of ROSTER) {
-      if (w.id === 'w-pip') continue; // unknown until first heard from
-      if (w.id === 'w-oak') {
+      if (w.id === 'uditus.fixer') continue; // unknown until first heard from
+      if (w.id === 'etsy.fixer') {
         this.emit('worker.state', { businessId: w.businessId, workerId: w.id }, { state: 'offline', departmentId: w.homeDepartmentId });
         continue;
       }
@@ -273,14 +273,14 @@ export class DemoSim {
 
     // Pip has no observed status at load; first heard from 40 s later.
     this.at(this.loadAt + 40_000, () => {
-      this.emit('worker.heartbeat', { businessId: 'uditus', workerId: 'w-pip' });
-      this.online.add('w-pip');
-      this.emit('worker.state', { businessId: 'uditus', workerId: 'w-pip' }, { state: 'idle', departmentId: loungeOf('uditus') });
+      this.emit('worker.heartbeat', { businessId: 'uditus', workerId: 'uditus.fixer' });
+      this.online.add('uditus.fixer');
+      this.emit('worker.state', { businessId: 'uditus', workerId: 'uditus.fixer' }, { state: 'idle', departmentId: loungeOf('uditus') });
     });
     // Oak comes back online later; Etsy fixes wait until then.
     this.at(this.loadAt + 150_000, () => {
-      this.online.add('w-oak');
-      this.emit('worker.state', { businessId: 'etsy-studio', workerId: 'w-oak' }, { state: 'idle', departmentId: loungeOf('etsy-studio') });
+      this.online.add('etsy.fixer');
+      this.emit('worker.state', { businessId: 'etsy-studio', workerId: 'etsy.fixer' }, { state: 'idle', departmentId: loungeOf('etsy-studio') });
     });
 
     this.scriptCapacity();
@@ -424,10 +424,10 @@ export class DemoSim {
       (t) => t.businessId === biz && t.status !== 'ready' && t.status !== 'held',
     ).length;
     if (open < 6) {
-      const hermes = 'w-hermes';
+      const hermes = 'armis.ceo';
       this.emit('worker.state', { businessId: 'hermes-hq', workerId: hermes }, {
         state: 'active',
-        departmentId: 'hermes-hq:dispatch',
+        departmentId: 'hermes-hq:leadership',
         action: `Routing new work to ${BUSINESS_BY_ID[biz]?.brand.displayName}`,
       });
       const id = this.createTask(biz, 'research');
@@ -484,10 +484,10 @@ export class DemoSim {
   private ledgerCreationLoop() {
     const open = Object.values(this.truth.tasks).filter((t) => t.businessId === 'aster-ledger' && !['ready', 'rejected', 'held'].includes(t.status)).length;
     if (open < 7) {
-      this.emit('worker.state', { businessId: 'hermes-hq', workerId: 'w-hermes' }, { state: 'active', departmentId: 'hermes-hq:dispatch', action: 'Routing a new candidate to Aster Ledger' });
+      this.emit('worker.state', { businessId: 'hermes-hq', workerId: 'armis.ceo' }, { state: 'active', departmentId: 'hermes-hq:leadership', action: 'Routing a new candidate to Aster Ledger' });
       const id = this.createLedgerTask('feeds');
       this.emit('task.handoff', { businessId: 'aster-ledger', taskId: id }, { from: 'hq', to: 'feeds', outcome: 'dispatched', durationMs: 7000 });
-      this.after(4000, () => this.emit('worker.state', { businessId: 'hermes-hq', workerId: 'w-hermes' }, { state: 'idle', departmentId: 'hermes-hq:lounge' }));
+      this.after(4000, () => this.emit('worker.state', { businessId: 'hermes-hq', workerId: 'armis.ceo' }, { state: 'idle', departmentId: 'hermes-hq:lounge' }));
       if ((this.nextTemplate['aster-ledger'] ?? 0) % 3 === 0) this.createTraderTask();
     }
     this.after(this.rng.int(30_000, 48_000), () => this.ledgerCreationLoop());
@@ -585,10 +585,10 @@ export class DemoSim {
   }
 
   private pollLoop() {
-    const echo = 'w-echo';
+    const echo = 'armis.operations';
     this.emit('worker.state', { businessId: 'hermes-hq', workerId: echo }, {
       state: 'active',
-      departmentId: 'hermes-hq:capacity',
+      departmentId: 'hermes-hq:operations',
       action: 'Checking provider status (simulated - no provider is called)',
     });
     for (const c of Object.values(this.caps)) {
@@ -629,6 +629,8 @@ export class DemoSim {
         const worker = ROSTER.find(
           (w) =>
             w.businessId === biz &&
+            w.role === 'worker' &&
+            w.id.endsWith('.' + ({research:'researcher',feeds:'researcher',trader_watch:'researcher',rules:'reviewer',audit:'reviewer',creation:'creator',fixes:'fixer',portfolio:'creator'} as Record<string,string>)[stage]) &&
             w.homeDepartmentId === departmentForStage(biz, stage) &&
             this.online.has(w.id) &&
             !this.busy.has(w.id) &&
@@ -748,9 +750,9 @@ export class DemoSim {
 
   private release(run: Run, delay = 1200) {
     this.runs.delete(run.attemptId);
+    this.emit('worker.state', { businessId: run.businessId, workerId: run.workerId }, { state: 'idle', departmentId: loungeOf(run.businessId) });
     this.after(delay, () => {
       this.busy.delete(run.workerId);
-      this.emit('worker.state', { businessId: run.businessId, workerId: run.workerId }, { state: 'idle', departmentId: loungeOf(run.businessId) });
     });
   }
 

@@ -4,6 +4,10 @@ An interactive, isometric pixel-art viewer for the Hermes workshop. It shows a c
 
 **Live is the default: read-only, local observed telemetry.** A single loopback service serves the built dashboard and sanitized SSE. It can read an explicitly bound Hermes session or an existing sanitized Armis journal; without an opted-in source it stays disconnected. Demo remains a separate explicitly selected simulation. No provider account access, AI calls, execution host, credentials in the frontend, or operational business activation is involved. See [docs/LIVE-INTEGRATION.md](docs/LIVE-INTEGRATION.md) for the actual connection and its observation limits.
 
+## Current Mac installation
+
+See [docs/MAC-LIVE-ACTIVATION.md](docs/MAC-LIVE-ACTIVATION.md) for Connor’s update combined with the installed viewer fixes, actual setup-runtime journal, optional Uditus read-only records, missing task-schema gap and rollback. Inside **Armis Syndicate HQ → Activity → Runtime evidence**, inspect installed bindings, Operations/worker/review receipts and unreleased internal results. Missing Uditus task tables never block HQ.
+
 ## Run it
 
 Requirements: Node.js 24+ for the Live service (verified on Node 26.7.0). No secrets or `.env` are needed.
@@ -81,6 +85,8 @@ docs/           ARCHITECTURE.md, LIVE-INTEGRATION.md
 ```
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/LIVE-INTEGRATION.md](docs/LIVE-INTEGRATION.md) and [ASSETS.md](ASSETS.md).
+
+For city expansion, follow [docs/BUILDING-SPEC.md](docs/BUILDING-SPEC.md). It defines island placement, building geometry, navigation, labels, Control mappings and acceptance checks. `AGENTS.md` directs future agents to this contract.
 
 ## Status and known gaps
 

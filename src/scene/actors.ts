@@ -42,24 +42,8 @@ export class ActorSystem {
 
   constructor(private scene: InteriorScene) {}
 
-  private roomAt(p: Pt): Room | undefined {
-    return this.scene.rooms.find((r) => p[0] >= r.x0 && p[0] <= r.x1 && p[1] >= r.y0 && p[1] <= r.y1);
-  }
-
   private routeTo(from: Pt, to: Pt): Pt[] {
-    const a = this.roomAt(from);
-    const b = this.roomAt(to);
-    if (a && b && a === b) return [to];
-    const cy = this.scene.corridorY;
-    const pts: Pt[] = [];
-    if (a) pts.push(a.door);
-    pts.push([a ? a.door[0] : from[0], cy]);
-    if (b) {
-      pts.push([b.door[0], cy]);
-      pts.push(b.door);
-    }
-    pts.push(to);
-    return pts;
+    return this.scene.walk(from, to);
   }
 
   update(state: WorkshopState, t: number, motion: boolean) {
@@ -69,7 +53,7 @@ export class ActorSystem {
     const workers = Object.values(state.workers)
       .filter((w) => w.businessId === biz)
       .sort((a, b) => (a.id < b.id ? -1 : 1));
-    const seatUse = new Map<string, number>();
+    const seatUse = new Map<string, Set<number>>();
     const usedSpots = new Set<number>();
     const lounge = this.scene.lounge;
     const roomById = new Map(this.scene.rooms.map((r) => [r.departmentId, r]));
@@ -81,23 +65,29 @@ export class ActorSystem {
       if (!room || !room.seats.length) return null;
       const home = workers.filter((x) => x.homeDepartmentId === room.departmentId);
       let index = home.findIndex((x) => x.id === w.id);
-      const used = seatUse.get(room.departmentId) ?? 0;
-      if (index < 0 || index >= room.seats.length) index = Math.min(room.seats.length - 1, used);
-      seatUse.set(room.departmentId, used + 1);
+      const used = seatUse.get(room.departmentId) ?? new Set<number>();
+      if (index < 0 || index >= room.seats.length || used.has(index)) index = room.seats.findIndex((_, i) => !used.has(i));
+      if (index < 0) return null;
+      used.add(index);
+      seatUse.set(room.departmentId, used);
       return { room, index };
     };
 
-    let absent = 0;
+    const loungeFor = new Map<string, number>();
+    for (const w of workers) {
+      let index = hash32(w.id) % Math.max(1, lounge.length);
+      for (let k = 0; k < lounge.length && usedSpots.has(index); k++) index = (index + 1) % lounge.length;
+      usedSpots.add(index); loungeFor.set(w.id, index);
+    }
     for (const w of workers) {
       const d = displayStatus(state, w);
-      if (d.state === 'offline' || d.state === 'unknown') {
-        // not present at a desk: a faded figure waits by the entrance, never animated
-        const i = absent++;
-        const at: Pt = [this.scene.entrance[0] + 14 + (i % 4) * 9, this.scene.entrance[1] - 8 + Math.floor(i / 4) * 9];
-        plans.push({ w, target: at, key: `absent:${i}`, pose: 'stand', flip: false, seat: null, d });
+      const prior = this.actors.get(w.id);
+      if (d.state === 'unknown' && prior) {
+        // Missing telemetry freezes the last observed location, never implies rest.
+        plans.push({ w, target: [...prior.pos] as Pt, key: prior.targetKey, pose: prior.seat ? 'sit' : 'stand', flip: prior.flip, seat: prior.seat, d });
         continue;
       }
-      const atDesk = d.state !== 'idle';
+      const atDesk = !['idle', 'offline', 'unknown'].includes(d.state) || (d.stale && d.reported !== null && !['idle','offline','unknown'].includes(d.reported));
       if (atDesk) {
         const dept = d.departmentId;
         const seat = seatFor(w, dept);
@@ -107,11 +97,8 @@ export class ActorSystem {
           continue;
         }
       }
-      // idle: pick a lounge spot that rotates over time (coffee, sofa, standing)
-      const bucket = Math.floor((t + (hash32(w.id) % 40_000)) / 45_000);
-      let idx = (hash32(w.id) + bucket * 3) % Math.max(1, lounge.length);
-      for (let k = 0; k < lounge.length && usedSpots.has(idx); k++) idx = (idx + 1) % lounge.length;
-      usedSpots.add(idx);
+      // Every declared identity owns one stable rest spot in its home building.
+      const idx = loungeFor.get(w.id)!;
       const spot = lounge[idx];
       if (spot) plans.push({ w, target: spot.at, key: `lounge:${idx}`, pose: spot.pose, flip: spot.flip, seat: null, d });
     }
@@ -140,6 +127,8 @@ export class ActorSystem {
         a.path = motion && !still ? this.routeTo(a.pos, p.target) : [];
         if (!motion || still) a.pos = [...p.target] as Pt;
       }
+      if (p.d.state === 'unknown') { a.path = []; }
+      if (!motion) { a.path = []; a.pos = [...p.target] as Pt; }
       a.seat = p.seat;
       a.state = p.d.state;
       const s = p.d.state;
@@ -236,6 +225,10 @@ export class ActorSystem {
       // soft shadow
       px(ctx, sx - 6, sy - 1, 'rgba(0,0,0,0.35)', 12, 2);
       ctx.drawImage(spr, x, y, CHAR_W * S, CHAR_H * S);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y, CHAR_W * S, CHAR_H * S); ctx.clip();
+      this.scene.drawOccluders(ctx, a.pos);
+      ctx.restore();
       if (a.icon) {
         const ic = iconSprite(a.icon);
         const bob = a.icon === 'hourglass' && a.animated ? Math.floor(t / 500) % 2 : 0;
@@ -267,6 +260,10 @@ export class ActorSystem {
       }
     }
     return best;
+  }
+
+  positions() {
+    return [...this.actors.values()].map(a => ({id:a.id, at:[...a.pos] as Pt, target:a.targetKey, state:a.state, moving:a.path.length > 0}));
   }
 
   screenOf(id: string): Pt | null {
