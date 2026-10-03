@@ -2,14 +2,14 @@ import type { AdapterSink, WorkshopAdapter } from '../adapter';
 import { mapObservation, projectSnapshot, validateObservation, type Observation } from './projection';
 import { normalizeSnapshot } from '../../core/normalize';
 import { currentWorkEvents, withCurrentWork } from './currentWork';
-import { diagnostics as streamDiagnostics } from '../../core/connections';
+import { diagnostics as streamDiagnostics,decodeFeedReports } from '../../core/connections';
 
 export interface Stream {
   addEventListener(type: string, listener: (event: { data: string }) => void): void;
   onerror: (() => void) | null;
   close(): void;
 }
-interface Options { createStream?: () => Stream; now?: () => number }
+interface Options { createStream?: () => Stream; now?: () => number; fetchEvidence?: (()=>Promise<Response>) | null }
 const integer = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 export class LiveAdapter implements WorkshopAdapter {
   readonly kind = 'live' as const;
@@ -17,6 +17,9 @@ export class LiveAdapter implements WorkshopAdapter {
   readonly capabilities = { redirect: false, controls: false };
   readonly diagnostics = { rejected: 0, contractMismatch: false, message: '' };
   private sink: AdapterSink | null = null;
+  private evidenceTimer:ReturnType<typeof setInterval>|null=null;
+  private evidenceBusy=false;
+  private readonly fetchEvidence:(()=>Promise<Response>)|null;
   private stream: Stream | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
@@ -31,6 +34,7 @@ export class LiveAdapter implements WorkshopAdapter {
   private readonly createStream: () => Stream;
   constructor(options: Options = {}) {
     this.now = options.now ?? Date.now;
+    this.fetchEvidence=options.fetchEvidence===undefined?(options.createStream?null:()=>fetch('/api/evidence',{credentials:'same-origin',signal:AbortSignal.timeout(12000)})):options.fetchEvidence;
     this.createStream = options.createStream ?? (() => new EventSource('/api/events') as unknown as Stream);
   }
   start(sink: AdapterSink) {
@@ -39,6 +43,8 @@ export class LiveAdapter implements WorkshopAdapter {
     this.diagnostics.rejected = 0; this.diagnostics.contractMismatch = false; this.diagnostics.message = '';
     sink.connection('disconnected');
     this.connect();
+    void this.readEvidence();
+    this.evidenceTimer=setInterval(()=>void this.readEvidence(),15000);
     sink.tick(this.now());
     this.timer = setInterval(() => {
       this.sink?.tick(this.now());
@@ -72,7 +78,7 @@ export class LiveAdapter implements WorkshopAdapter {
           this.sink!.reset(); // authoritative replacement, including empty/restarted sources
           this.sink!.snapshot(snapshot, 'connected');
           this.sink!.connection('connected');
-          streamDiagnostics.update({acceptedSnapshots:streamDiagnostics.get().acceptedSnapshots+1,feeds:{}});
+          streamDiagnostics.update({acceptedSnapshots:streamDiagnostics.get().acceptedSnapshots+1});
           this.workDiagnostics(this.currentWork);
         } else {
           if (this.epoch === null) { this.reject('Snapshot required before incremental events'); return; }
@@ -120,12 +126,28 @@ export class LiveAdapter implements WorkshopAdapter {
     const feeds={...streamDiagnostics.get().feeds};
     if(v?.state==='connected'&&Number.isSafeInteger(v.observedAt)&&v.task&&v.task.lastUpdate<=v.observedAt!&&v.observedAt!<=this.now()+30000){
       const base={status:'ok' as const,checkedAt:v.observedAt!,lastRecordAt:v.task.lastUpdate};
-      feeds.runtime={...base,id:'runtime',records:1,detail:'Successfully read and mapped the explicitly bound default Hermes SessionDB session'};
-      feeds.tools={...base,id:'tools',records:Array.isArray(v.steps)?v.steps.length:0,detail:'Sanitized native tool-step metadata; steps are not workers or acceptance'};
+      feeds.runtime={...base,id:'runtime',records:1,source:'Bound native Hermes SessionDB',detail:'Successfully read and mapped the explicitly bound default Hermes SessionDB session'};
+      feeds.tools={...base,id:'tools',records:Array.isArray(v.steps)?v.steps.length:0,source:'Bound native Hermes SessionDB tool metadata',detail:'Sanitized native tool-step metadata; steps are not workers or acceptance'};
     }else{
       for(const id of ['runtime','tools'] as const)feeds[id]={id,status:'not_configured',checkedAt:this.now(),lastRecordAt:null,records:0,detail:'No successful explicitly bound native source check in this frame'};
     }
     streamDiagnostics.update({feeds});
+  }
+  private async readEvidence(){
+    if(!this.fetchEvidence||this.evidenceBusy||!this.sink)return;
+    const generation=this.generation;this.evidenceBusy=true;
+    try{
+      const response=await this.fetchEvidence();if(!response.ok)throw Error('Evidence source unavailable');
+      const value=await response.json();const reports=decodeFeedReports(value?.reports,this.now());
+      if(!reports||reports.length===0)throw Error('Unsupported source report contract');
+      if(generation!==this.generation||!this.sink)return;
+      const feeds={...streamDiagnostics.get().feeds};
+      // Native animation/source diagnostics stay driven by immediate accepted SSE frames.
+      for(const report of reports)if(report.id!=='runtime'&&report.id!=='tools')feeds[report.id]=report;
+      streamDiagnostics.update({feeds});
+    }catch{
+      // Retain original evidence timestamps: an outage must expire, never re-date an old check.
+    }finally{if(generation===this.generation)this.evidenceBusy=false;}
   }
   private reject(message: string) { this.diagnostics.rejected++; this.diagnostics.message = message; streamDiagnostics.update({rejectedMessages:streamDiagnostics.get().rejectedMessages+1,lastError:message}); }
   private recover(message: string) {
@@ -140,6 +162,8 @@ export class LiveAdapter implements WorkshopAdapter {
   }
   stop() {
     this.generation++; this.streamGeneration++;
+    if(this.evidenceTimer!==null)clearInterval(this.evidenceTimer);
+    this.evidenceTimer=null;this.evidenceBusy=false;
     this.stream?.close(); this.stream = null;
     if (this.timer !== null) clearInterval(this.timer);
     if (this.retry !== null) clearTimeout(this.retry);
