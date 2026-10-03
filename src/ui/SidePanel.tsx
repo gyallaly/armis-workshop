@@ -11,6 +11,7 @@ import { clock, relTime, shortClock } from './format';
 import { Icon } from './Icon';
 import { store, ui, useUi, useWorkshop } from './store';
 import { OrganizationPanel } from './OrganizationPanel';
+import { ConnectionsPanel } from './ConnectionsPanel';
 
 export const STATE_ICON: Record<WorkerState, string> = {
   active: 'bolt',
@@ -530,6 +531,7 @@ export function SidePanel() {
   let content;
   if (tab === 'tasks') content = <TaskList state={state} />;
   else if (tab === 'capacity') content = <CapacityPanel />;
+  else if (tab === 'connections') content = <ConnectionsPanel />;
   else if (selection?.kind === 'worker' && state.workers[selection.id]) content = <WorkerDetail state={state} worker={state.workers[selection.id]!} />;
   else if (selection?.kind === 'task' && state.tasks[selection.id]) content = <TaskDetail state={state} task={state.tasks[selection.id]!} />;
   else if (selection?.kind === 'dot' && state.tasks[selection.dot.taskId]) content = <TaskDetail state={state} task={state.tasks[selection.dot.taskId]!} />;
@@ -538,6 +540,7 @@ export function SidePanel() {
     ['activity', 'Activity'],
     ['tasks', 'Tasks'],
     ['capacity', 'AI capacity'],
+    ['connections', 'Connections'],
   ];
   return (
     <aside className="panel" aria-label="Details">

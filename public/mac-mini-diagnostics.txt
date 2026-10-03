@@ -1,0 +1,77 @@
+python3 -c 'import sys; exec(compile(sys.stdin.read().replace(chr(160), " "), "<diagnostics>", "exec"))' <<'PY'
+import os, platform, shutil, subprocess, json, sqlite3
+from pathlib import Path
+
+def run(args):
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, timeout=12)
+        return p.stdout.strip()[:10000] if p.returncode == 0 else 'Command failed (exit ' + str(p.returncode) + ')'
+    except Exception as e:
+        return type(e).__name__
+
+home = Path.home()
+report = {'purpose': 'Read-only ARMIS discovery; no services started or configuration changed',
+          'system': {'os': platform.system(), 'release': platform.release(), 'architecture': platform.machine()},
+          'working_directory': str(Path.cwd()), 'tools': {}, 'repositories': [], 'hermes_storage': []}
+for name in ['hermes', 'python3', 'node', 'git', 'systemctl', 'launchctl']:
+    report['tools'][name] = shutil.which(name)
+for name in ['python3', 'node', 'git']:
+    if shutil.which(name): report['tools'][name + '_version'] = run([name, '--version'])
+
+roots = [Path.cwd(), home]
+repos, seen = [], set()
+skip = {'node_modules', '.git', '.cache', '.local', 'Library', 'venv', '.venv', 'dist', '.hermes', '.npm', '.codex'}
+visited = 0
+for root in roots:
+    for base, dirs, files in os.walk(root):
+        visited += 1
+        depth = len(Path(base).relative_to(root).parts)
+        dirs[:] = [d for d in dirs if d not in skip and not d.startswith('.')]
+        if depth >= 4 or visited > 6000: dirs[:] = []
+        path = Path(base)
+        if path.name.lower() in {'armis', 'armis-workshop', 'armis-control', 'uditus', 'hermes-agent'} and (path / '.git').exists():
+            if str(path) not in seen:
+                seen.add(str(path)); repos.append(path)
+        if visited > 6000: break
+for path in repos:
+    item = {'path': str(path), 'commit': run(['git', '-C', str(path), 'rev-parse', 'HEAD']),
+            'branch': run(['git', '-C', str(path), 'branch', '--show-current']),
+            'change_count': len(run(['git', '-C', str(path), 'status', '--porcelain']).splitlines()),
+            'entry_files': [n for n in ['package.json','pyproject.toml','AGENTS.md','docker-compose.yml','compose.yml','supabase'] if (path/n).exists()]}
+    report['repositories'].append(item)
+
+# Names/schema/counts only. Never print configuration, environment or session content.
+storage = home / '.hermes'
+if storage.exists():
+    for base, dirs, files in os.walk(storage):
+        depth = len(Path(base).relative_to(storage).parts)
+        if depth >= 2: dirs[:] = []
+        for name in files:
+            path = Path(base) / name
+            item = {'path': str(path.relative_to(home)), 'bytes': path.stat().st_size}
+            if path.suffix in {'.db', '.sqlite', '.sqlite3'}:
+                try:
+                    db = sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True, timeout=2)
+                    item['tables'] = []
+                    for (table,) in db.execute("SELECT name FROM sqlite_master WHERE type='table' LIMIT 30"):
+                        safe = table.replace('"', '""')
+                        columns = [r[1] for r in db.execute('PRAGMA table_info("' + safe + '")')]
+                        item['tables'].append({'name': table, 'columns': columns})
+                    db.close()
+                except Exception as e: item['database_check'] = type(e).__name__
+            report['hermes_storage'].append(item)
+            if len(report['hermes_storage']) >= 80: break
+        if len(report['hermes_storage']) >= 80: break
+if shutil.which('systemctl'):
+    units = run(['systemctl','list-units','--type=service','--all','--no-pager','--plain'])
+    report['related_services'] = [l for l in units.splitlines() if any(s in l.lower() for s in ['hermes','armis','uditus'])]
+elif shutil.which('launchctl'):
+    units = run(['launchctl','list'])
+    report['related_services'] = [l for l in units.splitlines() if any(s in l.lower() for s in ['hermes','armis','uditus'])]
+if shutil.which('ps'):
+    names = run(['ps','-eo','comm='])
+    report['related_process_names'] = sorted(set(l.strip() for l in names.splitlines() if any(s in l.lower() for s in ['hermes','armis','uditus','python','node'])))
+if shutil.which('ss'): report['listening_ports'] = run(['ss','-ltn'])
+elif shutil.which('lsof'): report['listening_ports'] = run(['lsof','-nP','-iTCP','-sTCP:LISTEN'])
+print(json.dumps(report, indent=2))
+PY

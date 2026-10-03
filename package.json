@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check:mac": "node scripts/check-mac-connection.mjs",
+    "test:deployment": "node --test scripts/check-mac-connection.test.mjs",
     "test:e2e": "playwright test",
     "verify": "npm run typecheck && npm test && npm run build && npm run test:e2e"
   },

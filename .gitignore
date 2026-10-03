@@ -8,3 +8,4 @@ playwright-report/
 dist-snapshot/
 screenshots/
 scripts-shot.mjs
+.armis/

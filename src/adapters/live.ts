@@ -2,6 +2,7 @@ import { ROSTER, DEPARTMENT_BY_ID, BUSINESS_BY_ID } from '../core/config';
 import { normalizeEvent, normalizeSnapshot } from '../core/normalize';
 import type { Snapshot, ActivityEvent } from '../core/types';
 import type { AdapterSink, WorkshopAdapter } from './adapter';
+import { decodeFeedReports, diagnostics } from '../core/connections';
 
 export type BridgeMessage = {type:'snapshot'; snapshot:Snapshot} | {type:'events'; events:ActivityEvent[]};
 const known = new Map(ROSTER.map(w => [w.id,w]));
@@ -42,16 +43,37 @@ export class LiveBridgeAdapter implements WorkshopAdapter {
   constructor(private url: string) {}
   start(sink: AdapterSink) {
     this.stop();
+    diagnostics.reset();
     sink.connection('reconnecting');
     this.ready = false;
     this.stream = new EventSource(this.url, {withCredentials:true});
     this.stream.onmessage = event => {
-      const message = decodeBridgeMessage(event.data,Date.now());
-      if (!message) { this.ready = false; sink.connection('reconnecting'); return; }
-      if (message.type === 'snapshot') { this.ready = true; sink.snapshot(message.snapshot,'connected'); }
-      else if (this.ready) sink.events(message.events);
+      const at=Date.now();
+      diagnostics.update({lastMessageAt:at});
+      let raw: any;
+      try { if(event.data.length<=2_000_000) raw=JSON.parse(event.data); } catch { /* validated below */ }
+      if(raw?.type==='health') {
+        const reports=this.ready ? decodeFeedReports(raw.feeds,at) : null;
+        if(reports) {
+          diagnostics.update({lastValidAt:at,lastError:null,feeds:{...diagnostics.get().feeds,...Object.fromEntries(reports.map(r=>[r.id,r]))}});
+          return;
+        }
+      }
+      const message = decodeBridgeMessage(event.data,at);
+      if (!message || (message.type==='events' && !this.ready)) {
+        diagnostics.update({rejectedMessages:diagnostics.get().rejectedMessages+1,lastError:'Invalid message or events received before a validated snapshot'});
+        this.ready = false; sink.connection('reconnecting'); return;
+      }
+      if (message.type === 'snapshot') {
+        this.ready = true;
+        diagnostics.update({acceptedSnapshots:diagnostics.get().acceptedSnapshots+1,lastValidAt:at,lastError:null,feeds:{}});
+        sink.snapshot(message.snapshot,'connected');
+      } else {
+        sink.events(message.events);
+        diagnostics.update({acceptedEvents:diagnostics.get().acceptedEvents+message.events.length,lastValidAt:at,lastError:null});
+      }
     };
-    this.stream.onerror = () => { this.ready = false; sink.connection('reconnecting'); };
+    this.stream.onerror = () => { this.ready = false; diagnostics.update({lastError:'Stream unavailable; a new validated snapshot is required'}); sink.connection('reconnecting'); };
     sink.tick(Date.now());
     this.timer = setInterval(() => sink.tick(Date.now()),1000);
   }

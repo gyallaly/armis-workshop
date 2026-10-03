@@ -1455,6 +1455,25 @@ textarea {
   .topcounts > span:last-child { display: none; }
   .clock .small { display: none; }
 }
+.blabel:not(:hover):not(:focus-visible):not(.is-hover) .blabel__counts { display: none; }
+.scene-job {
+  position: absolute;
+  left: -8px;
+  top: -16px;
+  width: 16px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+.scene-job:focus-visible {
+  opacity: 1;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  background: #253c4b;
+}
 @media (max-width: 1600px) {
   .topcounts { display: none; }
   .clock .small {

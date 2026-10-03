@@ -1,5 +1,29 @@
 import { expect, test } from '@playwright/test';
 
+test('workstation job objects open the corresponding job by pointer and keyboard',async({page})=> {
+  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.goto('/');
+  await page.getByLabel('Motion',{exact:false}).selectOption('reduced');
+  await page.getByRole('button',{name:/Enter Uditus/}).click();
+  const job=page.getByRole('button',{name:/Open job:/}).first();
+  await expect(job).toBeAttached();
+  await page.getByRole('button',{name:'Pause',exact:true}).click();
+  const title=(await job.getAttribute('aria-label'))!.replace('Open job: ','');
+  // The DOM control supplies keyboard access; pointer hits the painted folio.
+  const at=await job.evaluate(el=> {
+    const anchor=el.parentElement!.getBoundingClientRect();
+    return {x:anchor.x,y:anchor.y-6};
+  });
+  await page.mouse.click(at.x,at.y);
+  await expect(page.getByRole('complementary',{name:'Details'}).getByRole('heading',{level:2})).toHaveText(title);
+  await page.keyboard.press('Escape');
+  await job.focus(); await page.keyboard.press('Enter');
+  await expect(page.getByRole('complementary',{name:'Details'}).getByRole('heading',{level:2})).toHaveText(title);
+  await page.getByLabel('Data source',{exact:true}).selectOption('live');
+  await expect(page.getByRole('button',{name:/Open job:/})).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 for (const width of [1280, 1440]) test(`all city labels remain separated inside a ${width}px viewport at every zoom extreme`, async ({ page }) => {
   test.setTimeout(90_000);
   await page.setViewportSize({ width, height: 720 });

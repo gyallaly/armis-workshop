@@ -42,3 +42,13 @@ Provider rate-limit headers ─────┘        (read-only by default)
 `src/adapters/control.ts` pins the inspected armis-control registry and explicitly maps Control business IDs to city businesses. Its pure snapshot and event projections validate the boundary, preserve missing stage/session/repair information as unreported, and never manufacture executive activity. `OrganizationPanel` renders declared ownership, delegation and mandates independently from observed worker sessions.
 
 The projections and SSE client exist. The live source remains disconnected without configuration, and unconfirmed until the Mac mini bridge supplies a valid snapshot. Control budgets, pool state, leases and locks are not currently displayed as observed telemetry. A real stream still needs to be connected and exercised before live fidelity can be claimed.
+
+## Connections tab and source health
+
+The Connections tab independently tracks accepted snapshots/events, rejected messages, last arrival, last valid data and the configured endpoint origin. Demo data never verifies a live source. A connected transport is not evidence that every underlying feed works.
+
+After a validated snapshot, the bridge may send `{"type":"health","feeds":[...]}`. Each report has `id` (from `FEEDS` in `src/core/connections.ts`), `status` (`ok`, `error`, `not_configured`), `checkedAt` (epoch milliseconds), `lastRecordAt` (epoch milliseconds or null), `records` (nonnegative integer for the bridge's observation window), and a sanitized `detail` (at most 500 characters).
+
+Emit reports about every 15 seconds after checking the actual source reader. `ok` means the source check and mapping succeeded, including legitimate empty/quiet sources; it must never mean a planned connection, synthetic fixture or merely an open socket. Report source failures explicitly. Health checks expire after 45 seconds. Transport evidence expires after 90 seconds. Reconnecting, invalid messages and source changes suppress green status; a new snapshot clears prior feed reports. The bridge must also validate source-to-city identities and semantics. This dashboard cannot prove that a remote producer's claims are truthful without real-stream tests.
+
+The single terminal block in `public/mac-mini-diagnostics.txt` collects read-only installation, repository, service, process-name, port and storage-schema information. It does not install a bridge or claim any source is connected. Configuration contents, credentials and session text are excluded. Return its output to identify the installed runtime and implement verified readers before deploying the bridge.
