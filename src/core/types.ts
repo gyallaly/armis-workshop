@@ -87,6 +87,7 @@ export interface Appearance {
 
 /** Persistent character identity. Never carries live status. */
 export interface Worker {
+  installation?: { defined: boolean; installed: boolean | null; observed: boolean; roleBinding: 'verified' | 'unbound' | 'unknown'; source: string };
   id: WorkerId;
   name: string;
   businessId: BusinessId;
@@ -188,6 +189,7 @@ export interface CriterionState {
 }
 
 export interface Task {
+  parentTaskId?: string;
   id: TaskId;
   businessId: BusinessId;
   title: string;
@@ -235,7 +237,24 @@ export interface Measured<T> {
 
 export type Availability = 'available' | 'limited' | 'unavailable' | 'unknown';
 
+export interface CapacityWindow {
+  id: string;
+  label: string;
+  scope: string;
+  unit: 'requests' | 'input_tokens' | 'percent' | 'tokens';
+  remaining: Measured<number>;
+  limit: Measured<number>;
+  resetAt: Measured<number>;
+  observedAt: number | null;
+  source: string;
+  maxAgeMs: number;
+}
+
 export interface ProviderCapacity {
+  windows?: CapacityWindow[];
+  configured?: boolean;
+  source?: string;
+  maxAgeMs?: number;
   id: CapacityId;
   provider: string;
   scope: { kind: 'account' | 'project' | 'organization'; label: string };

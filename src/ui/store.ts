@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { DisconnectedLiveAdapter, type AdapterSink, type WorkshopAdapter } from '../adapters/adapter';
+import { type AdapterSink, type WorkshopAdapter } from '../adapters/adapter';
+import { LiveAdapter } from '../adapters/live/liveAdapter';
 import { DemoAdapter } from '../adapters/demo/demoAdapter';
 import type { ScenarioId } from '../adapters/demo/sim';
 import { ROSTER } from '../core/config';
@@ -9,7 +10,7 @@ import type { RedirectRequest, TrafficDot, Worker, WorkshopState } from '../core
 // ------------------------------------------------------------ persistence
 
 const PREFS_KEY = 'armis-workshop.prefs.v1';
-const ROSTER_KEY = 'armis-workshop.roster.v1';
+const ROSTER_KEY = 'armis-workshop.demo.roster.v2';
 
 export interface Prefs {
   source: 'demo' | 'live';
@@ -21,7 +22,7 @@ export interface Prefs {
   tab: 'activity' | 'tasks' | 'capacity';
 }
 
-const DEFAULT_PREFS: Prefs = { source: 'demo', scenario: 'steady', speed: 1, motion: 'system', taskFlow: true, minimap: true, tab: 'activity' };
+const DEFAULT_PREFS: Prefs = { source: 'live', scenario: 'steady', speed: 1, motion: 'system', taskFlow: true, minimap: true, tab: 'activity' };
 
 function load<T>(key: string, fallback: T): T {
   try {
@@ -119,7 +120,7 @@ const mq = typeof window !== 'undefined' && window.matchMedia ? window.matchMedi
 export const ui = new UiStore({
   view: { mode: 'campus' },
   selection: null,
-  prefs: load(PREFS_KEY, DEFAULT_PREFS),
+  prefs: { ...load(PREFS_KEY, DEFAULT_PREFS), source: 'live' },
   follow: false,
   redirectFor: null,
   evidenceFor: null,
@@ -143,6 +144,7 @@ class WorkshopStore extends Store<WorkshopState> implements AdapterSink {
   private roster: Worker[] = [];
   private pending: Action[] = [];
   private flushScheduled = false;
+  private sourceGeneration = 0;
 
   dispatch(a: Action) {
     this.set(reduce(this.s, a));
@@ -153,7 +155,9 @@ class WorkshopStore extends Store<WorkshopState> implements AdapterSink {
     this.pending.push(a);
     if (this.flushScheduled) return;
     this.flushScheduled = true;
+    const generation = this.sourceGeneration;
     const flush = () => {
+      if (generation !== this.sourceGeneration) return;
       this.flushScheduled = false;
       const list = this.pending;
       this.pending = [];
@@ -165,20 +169,26 @@ class WorkshopStore extends Store<WorkshopState> implements AdapterSink {
     else requestAnimationFrame(flush);
   }
 
-  snapshot: AdapterSink['snapshot'] = (snapshot, connection) => this.queue({ kind: 'snapshot', snapshot, connection });
+  snapshot: AdapterSink['snapshot'] = (snapshot, connection) => {
+    if (this.adapter?.kind === 'live') this.queue({ kind: 'reset', roster: [], connection, now: snapshot.takenAt });
+    this.queue({ kind: 'snapshot', snapshot, connection });
+  };
   /** receivedTs is stamped here, on arrival, never trusted from the source. */
   events: AdapterSink['events'] = (events) => {
-    const at = this.adapter?.clock() ?? Date.now();
+    const at = Date.now();
     this.queue({ kind: 'events', events: events.map((e) => ({ ...e, receivedTs: at })) });
   };
   connection: AdapterSink['connection'] = (connection) => this.queue({ kind: 'connection', connection });
   tick: AdapterSink['tick'] = (now) => this.queue({ kind: 'tick', now });
-  reset: AdapterSink['reset'] = () => this.queue({ kind: 'reset', roster: this.roster.length ? this.roster : ROSTER, connection: this.s.connection, now: this.s.now });
+  reset: AdapterSink['reset'] = () => this.queue({ kind: 'reset', roster: this.adapter?.kind === 'demo' ? this.roster : [], connection: this.s.connection, now: this.s.now });
 
   start(source: 'demo' | 'live', prefs: Prefs) {
     this.adapter?.stop();
+    this.sourceGeneration++;
     this.pending = []; // nothing from the previous adapter may leak into the new one
-    if (!this.roster.length) this.roster = loadRoster();
+    this.flushScheduled = false;
+    this.roster = source === 'demo' ? loadRoster() : [];
+    ui.update({ selection: null, follow: false, redirectFor: null, evidenceFor: null, newsFor: null });
     const conn = source === 'demo' ? 'demo' : 'disconnected';
     this.set(initialState(this.roster, conn, Date.now()));
     if (source === 'demo') {
@@ -186,9 +196,17 @@ class WorkshopStore extends Store<WorkshopState> implements AdapterSink {
       demo.subscribe((d) => ui.update({ demo: d }));
       this.adapter = demo;
     } else {
-      this.adapter = new DisconnectedLiveAdapter();
+      this.adapter = new LiveAdapter();
     }
-    this.adapter.start(this);
+    const generation = this.sourceGeneration;
+    const guarded: AdapterSink = {
+      snapshot: (...a) => { if (generation === this.sourceGeneration) this.snapshot(...a); },
+      events: (...a) => { if (generation === this.sourceGeneration) this.events(...a); },
+      connection: (...a) => { if (generation === this.sourceGeneration) this.connection(...a); },
+      tick: (...a) => { if (generation === this.sourceGeneration) this.tick(...a); },
+      reset: () => { if (generation === this.sourceGeneration) this.reset(); },
+    };
+    this.adapter.start(guarded);
   }
 
   get demo(): DemoAdapter | null {
@@ -216,7 +234,7 @@ class WorkshopStore extends Store<WorkshopState> implements AdapterSink {
   }
 }
 
-export const store = new WorkshopStore(initialState(ROSTER, 'disconnected', 0));
+export const store = new WorkshopStore(initialState([], 'disconnected', 0));
 
 export function useWorkshop<T>(sel: (s: WorkshopState) => T): T {
   return useSyncExternalStore(store.subscribe, () => sel(store.get()));

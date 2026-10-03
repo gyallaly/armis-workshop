@@ -25,8 +25,8 @@ export const BUSINESSES: Business[] = [
     id: 'hermes-hq',
     kind: 'hq',
     brand: {
-      displayName: 'Hermes HQ',
-      signText: 'HERMES HQ',
+      displayName: 'Armis Syndicate HQ',
+      signText: 'ARMIS HQ',
       provisional: true,
       provisionalNote: 'Provisional Armis/Hermes HQ identity - replace when final artwork exists.',
       colors: { primary: '#1a2233', secondary: '#2b3550', accent: '#f2b84b', glow: '#ffd27a' },

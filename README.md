@@ -2,14 +2,14 @@
 
 An interactive, isometric pixel-art viewer for the Hermes workshop. It shows a campus of businesses: Hermes HQ, Uditus, Etsy Studio (provisional) and Aster Ledger (provisional, paper trading only). You can walk through their interiors, follow workers and tasks, and inspect AI provider capacity.
 
-**Tonight's build runs on a deterministic demo adapter only.** Every number, worker state, quote and position on screen is simulated and clearly labelled DEMO / PAPER. The live adapter exists but is deliberately **disconnected**. No credentials, accounts, paid APIs, AI calls or network discovery are used.
+**Live is the default: read-only, local observed telemetry.** A single loopback service serves the built dashboard and sanitized SSE. It can read an explicitly bound Hermes session or an existing sanitized Armis journal; without an opted-in source it stays disconnected. Demo remains a separate explicitly selected simulation. No provider account access, AI calls, execution host, credentials in the frontend, or operational business activation is involved. See [docs/LIVE-INTEGRATION.md](docs/LIVE-INTEGRATION.md) for the actual connection and its observation limits.
 
 ## Run it
 
-Requirements: Node.js ≥ 20.19 (developed on Node 22.23). No secrets or `.env` are needed.
+Requirements: Node.js 24+ for the Live service (verified on Node 26.7.0). No secrets or `.env` are needed.
 
 ```bash
-npm install
+npm ci
 npm run dev          # http://127.0.0.1:5173
 ```
 
@@ -21,7 +21,8 @@ Other scripts:
 | `npm test` | Vitest unit tests: reducer, selectors, demo determinism, Aster Ledger |
 | `npm run build` | Typecheck and production build into `dist/` |
 | `npm run preview` | Serve `dist/` on http://127.0.0.1:4173 |
-| `npm run test:e2e` | Playwright browser tests (uses the system Microsoft Edge; set `PW_CHANNEL=chrome` elsewhere) |
+| `npm run serve:live` | Serve the built dashboard and same-origin read-only SSE on 127.0.0.1:4173; source must be explicitly bound |
+| `npm run test:e2e` | Playwright browser tests (Chromium; verified on Ubuntu with `PW_CHANNEL=chrome`) |
 | `npm run verify` | All of the above |
 
 ## Using the viewer
@@ -43,7 +44,7 @@ Other scripts:
   - **Redirect task** opens a simulated composer that moves through requested, acknowledged, then applied or rejected.
   - **View evidence** shows artifacts.
 - **Demo bar**
-  - Choose the source (Demo or Live, which is not connected), pause or resume, set the speed, and pick a scenario.
+  - Live opens by default. Explicitly select Demo for simulated controls, scenarios and playback.
   - **Reset** replays the same seeded run.
   - **Drop stream** simulates a disconnect followed by a reconnect snapshot.
   - The Motion setting can be System, Full or Reduced.
@@ -85,4 +86,4 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/LIVE-INTEGRATION.md](doc
 
 - The scene is procedurally drawn. It follows the approved mockups' composition and mood but is not pixel-identical, and closing the fidelity gap is ongoing work.
 - The multi-worker demo is an aspirational simulation. The documented Uditus workshop runs create, review, repair serialized with bounded repair; this viewer does not claim the current deployment runs this many workers.
-- The live integration is not built. Nothing here contacts Hermes, Uditus or any provider or venue.
+- The local Live integration observes only its explicitly bound source, not all Hermes activity. Business acceptance, quotas and unbound sessions remain unobserved. It never contacts a provider or trading venue. See the integration and source-mapping docs.

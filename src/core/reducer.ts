@@ -234,6 +234,7 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
         id: e.taskId,
         businessId: e.businessId,
         title: String(p.title ?? 'Untitled task'),
+        parentTaskId: typeof p.parentTaskId === 'string' ? p.parentTaskId : undefined,
         acceptanceCriteria: ((p.criteria as string[]) ?? []).map((text) => ({ text, state: 'pending' as const })),
         stage,
         status: 'queued',
@@ -595,7 +596,7 @@ function describe(s: WorkshopState, e: ActivityEvent): TimelineEntry | null {
       text = `${who}: ${p.action}`;
       break;
     case 'attempt.finished':
-      text = `${who} finished attempt (${p.outcome})`;
+      text = `${who} finished attempt (${p.outcome ?? 'outcome not observed'})`;
       break;
     case 'audit.findings': {
       const open = ((p.findings as AuditFinding[]) ?? []).filter((f) => !f.resolved);
