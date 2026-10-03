@@ -1,4 +1,5 @@
 import { mainIslandRocks } from './coast';
+import { drawReservedIsland, reservedIslandSkirt } from './reservedIsland';
 import { BUSINESS_BY_ID } from '../core/config';
 import {
   box,
@@ -121,10 +122,11 @@ export function buildCampus(assets: SceneAssets): CampusScene {
   const lights: { x: number; y: number; c: string; r: number; a: number }[] = [];
   const rnd = lcg(20261002);
 
-  // Open water surrounds a single bounded island. No off-island scenery.
+  // Open water surrounds the campus and its empty offshore land reserve.
   ctx.fillStyle = C.water;
   ctx.fillRect(0, 0, W, H);
   for (let i = 0; i < 1900; i++) px(ctx, rnd() * W, rnd() * H, rnd() < 0.5 ? '#102642' : '#122b48', 3, 1);
+  drawReservedIsland(ctx, iso);
   const E = 480;
   // Raised seawall grounds the island above the water plane.
   left(ctx, iso, E, 0, E, -8, 0, C.bankDk);
@@ -364,11 +366,13 @@ export function buildCampus(assets: SceneAssets): CampusScene {
 
   // water sample points for shimmer
   const shimmer: Pt[] = [];
+  const reservedSkirt = reservedIslandSkirt();
   for (let i = 0; i < 260; i++) {
     const side = rnd() < 0.5;
     const along = rnd() * 760 - 120;
     const off = 10 + rnd() * 160;
     const [x, y] = side ? [along, E + off] : [E + off, along];
+    if (pointInPoly([x, y], reservedSkirt)) continue;
     shimmer.push([iso.x(x, y), iso.y(x, y, -8)]);
   }
   const stars: Pt[] = [];
