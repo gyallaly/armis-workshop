@@ -199,6 +199,9 @@ export class DemoSim {
   }
 
   advanceTo(target: Millis): ActivityEvent[] {
+    // The wire contract is integer epoch milliseconds. Browser frame clocks
+    // have fractional deltas; quantize at the clock boundary, not validation.
+    target = Math.floor(target);
     while (this.queue.length && this.queue[0]!.at <= target) {
       const item = this.queue.shift()!;
       this.t = item.at;

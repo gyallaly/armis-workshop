@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 test('workstation job objects open the corresponding job by pointer and keyboard',async({page})=> {
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto('/');
+  await page.getByLabel('Data source',{exact:true}).selectOption('demo');
   await page.getByLabel('Motion',{exact:false}).selectOption('reduced');
   await page.getByRole('button',{name:/Enter Uditus/}).click();
   const job=page.getByRole('button',{name:/Open job:/}).first();
@@ -30,7 +31,7 @@ for (const width of [1280, 1440]) test(`all city labels remain separated inside 
   await page.goto('/');
   await expect(page.getByRole('button', { name: /Enter Uditus/ })).toBeVisible();
   await page.getByLabel('Motion', { exact: false }).selectOption('reduced');
-  for (const business of ['campus', 'Uditus', 'Etsy Studio', 'Aster Ledger', 'Hermes HQ']) {
+  for (const business of ['campus', 'Uditus', 'Etsy Studio', 'Aster Ledger', 'Armis Syndicate HQ']) {
     if (business !== 'campus') {
       await page.getByRole('button', { name: 'Campus', exact: true }).click();
       await page.getByRole('button', { name: new RegExp(`Enter ${business}`) }).click();

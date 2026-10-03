@@ -6,7 +6,7 @@ import { ROSTER } from '../src/core/config';
 import { DemoSim } from '../src/adapters/demo/sim';
 import { ORGANIZATION_ROLES, CONTROL_BUSINESS_IDS, projectControlSnapshot, projectControlEvent } from '../src/adapters/control';
 import type { ActivityEvent } from '../src/core/types';
-const event = (type:ActivityEvent['type'],payload:Record<string,unknown>,extra:Partial<ActivityEvent>={}):ActivityEvent => ({id:`${type}:${JSON.stringify(payload)}`,type,sourceTs:1000,receivedTs:1001,businessId:'uditus',taskId:'task',payload,...extra});
+const event = (type:ActivityEvent['type'],payload:Record<string,unknown>,extra:Partial<ActivityEvent>={}):ActivityEvent => ({id:`${type}:${JSON.stringify(payload).split('').reduce((a,c)=>((a*31+c.charCodeAt(0))>>>0),0)}`,type,sourceTs:1000,receivedTs:1001,businessId:'uditus',taskId:'task',payload,...extra});
 
 describe('adapter boundaries',()=>{
  it('only explicit ready events can mark a task ready',()=>{
@@ -36,7 +36,7 @@ describe('adapter boundaries',()=>{
  });
  it('capacity consumers share stale and connection semantics with worker presentation',()=>{
   const worker=ROSTER[0]!;
-  let s=applyEvent(initialState(ROSTER,'connected',1000),event('worker.state',{state:'active',provider:{provider:'test',capacityId:'cap',modelProvenance:'unknown'}},{workerId:worker.id}));
+  let s=applyEvent(initialState(ROSTER,'connected',1000),event('worker.state',{state:'active',provider:{provider:'test',capacityId:'cap',modelProvenance:'unknown'}},{workerId:worker.id,businessId:worker.businessId}));
   expect(capacityConsumers(s,'cap').map(w=>w.id)).toEqual([worker.id]);
   expect(capacityConsumers({...s,connection:'reconnecting'},'cap')).toEqual([]);
   s=reduce(s,{kind:'tick',now:1000+STALE_AFTER_MS+1});

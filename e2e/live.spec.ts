@@ -1,0 +1,50 @@
+import { expect, test } from '@playwright/test';
+
+test('Live opens without Demo identities; unobserved buildings stay unknown', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('combobox', { name: 'Data source' })).toHaveValue('live');
+  const health = await page.evaluate(() => fetch('/api/health').then(r => r.json()));
+  if (health.state === 'connected') await expect(page.getByText('LIVE · OBSERVED', { exact: true })).toBeVisible();
+  else await expect(page.getByText('LIVE · NOT CONNECTED', { exact: true })).toBeVisible();
+  await expect(page.getByText('DEMO DATA', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Enter Uditus/ })).toHaveAccessibleName(/status unknown/);
+  await expect(page.getByRole('button', { name: /Enter Aster Ledger/ }).getByText('DEMO / PAPER')).toHaveCount(0);
+  await page.getByRole('button', { name: /Enter Uditus/ }).click();
+  await expect(page.locator('.roster__btn')).toHaveCount(0);
+  await expect(page.getByText('No telemetry for this business.', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Campus', exact: true }).click();
+  await page.getByRole('button', { name: /Enter Aster Ledger/ }).click();
+  await expect(page.getByText('DEMO · PAPER TRADING', { exact: true })).toHaveCount(0);
+});
+
+test('explicit Hermes binding is observed, read-only, and reconstructed after refresh', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto('/');
+  const health = await page.evaluate(() => fetch('/api/health').then(r => r.json()));
+  test.skip(health.source !== 'hermes-metadata', 'Requires an explicitly bound real Hermes session; no fixture substitute.');
+  await expect(page.getByText('LIVE · OBSERVED', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: /Enter Armis Syndicate HQ/ }).click();
+  await expect(page.locator('.roster__btn')).toHaveCount(1);
+  await page.locator('.roster__btn').click();
+  await expect(page.getByRole('heading', { name: 'Hermes — default profile', exact: true })).toBeVisible();
+  await expect(page.getByText('Installed · observed · Armis role unbound', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Redirect task', exact: true })).toBeDisabled();
+  await expect(page.getByText(/Read-only Live viewer/).first()).toBeVisible();
+  await page.getByRole('tab', { name: 'Tasks', exact: true }).click();
+  await expect(page.locator('.tasklist__row')).toHaveCount(1);
+  await page.locator('.tasklist__row').click();
+  await expect(page.getByRole('heading', { name: 'Dashboard connection — integration test', exact: true })).toBeVisible();
+  const attempts = await page.locator('.attempts li').count();
+  expect(attempts).toBeGreaterThan(0);
+  await expect(page.locator('.tstatus--ready')).toHaveCount(0);
+  await expect(page.getByText(/undefined/)).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText('LIVE · OBSERVED', { exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: 'Tasks', exact: true }).click();
+  await expect(page.locator('.tasklist__row')).toHaveCount(1);
+  await page.locator('.tasklist__row').click();
+  expect(await page.locator('.attempts li').count()).toBeGreaterThanOrEqual(attempts);
+  await expect(page.locator('.tstatus--ready')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

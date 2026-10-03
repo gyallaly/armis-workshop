@@ -15,7 +15,7 @@ function RoleBranch({ role, allowed }: { role: ControlRole; allowed: Set<string>
       <details className="org__role">
         <summary><strong>{role.label}</strong><span>{role.kind === 'worker' ? 'Bounded worker' : role.kind.replaceAll('-', ' ')}</span></summary>
         <p>{role.mandate}</p>
-        <dl><dt>Identity</dt><dd>{role.id}</dd><dt>Reports to</dt><dd>{role.reportsTo ?? 'Owner'}</dd><dt>Execution</dt><dd>{status?.reported === null ? 'Not observed' : status?.state ?? 'Missing character'}{state.connection === 'demo' ? ' (simulated)' : ''}</dd></dl>
+        <dl><dt>Identity</dt><dd>{role.id}</dd><dt>Reports to</dt><dd>{role.reportsTo ?? 'Owner'}</dd><dt>Installation</dt><dd>{worker?.installation?.installed === true ? 'Installed (journal verified)' : 'Not verified'}</dd><dt>Execution</dt><dd>{!status || status.reported === null ? 'Unknown / not observed' : status.state}{state.connection === 'demo' ? ' (simulated)' : ''}</dd></dl>
       </details>
       {children.length > 0 && <ul>{children.map((r) => <RoleBranch key={r.id} role={r} allowed={allowed} />)}</ul>}
     </li>
@@ -25,7 +25,7 @@ function RoleBranch({ role, allowed }: { role: ControlRole; allowed: Set<string>
 /** Policy identities are separate from characters and observed execution. */
 export function OrganizationPanel({ businessId }: { businessId: string | null }) {
   const state = useWorkshop(s => s);
-  const issues = reconcileCity(state).filter(i => !businessId || !i.businessId || i.businessId === businessId);
+  const issues = reconcileCity(state).filter(i => (state.connection === 'demo' || i.code !== 'missing-agent') && (!businessId || !i.businessId || i.businessId === businessId));
   const roles = ORGANIZATION_ROLES.filter((r) => !businessId || r.businessId === businessId);
   const allowed = new Set(roles.map((r) => r.id));
   const roots = roles.filter((r) => !r.reportsTo || !allowed.has(r.reportsTo));

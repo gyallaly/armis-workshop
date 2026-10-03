@@ -1,5 +1,5 @@
 import { BUSINESS_BY_ID, DEPARTMENT_BY_ID, departmentForStage, loungeOf } from './config';
-import type { Millis, Task, Worker, WorkerState, WorkerStatus, WorkshopState } from './types';
+import type { Availability, Millis, ProviderCapacity, Task, Worker, WorkerState, WorkerStatus, WorkshopState } from './types';
 
 /** A worker not heard from for this long is shown as stale, not as working. */
 export const STALE_AFTER_MS = 90_000;
@@ -182,6 +182,20 @@ export function tasksWaitingOn(state: WorkshopState, capacityId: string): Task[]
  * unavailable. Unknown capacity never counts as "out".
  */
 export function capacityOut(state: WorkshopState): boolean {
-  const caps = Object.values(state.capacity);
-  return caps.length > 0 && caps.every((c) => c.availability.value === 'unavailable');
+  const caps = Object.values(state.capacity).filter((c) => c.configured !== false);
+  return caps.length > 0 && caps.every((c) => capacityAvailability(state, c) === 'unavailable');
+}
+
+/** Observation freshness is not evidence of recovery, nor is a reset countdown. */
+export function capacityFresh(now: Millis, observedAt: Millis | null, maxAgeMs = STALE_AFTER_MS): boolean {
+  return observedAt !== null && Number.isFinite(observedAt) && Number.isFinite(maxAgeMs) && maxAgeMs >= 0 &&
+    now >= observedAt && now - observedAt <= maxAgeMs;
+}
+
+/** Effective display state; never interpret unknown or expired data as exhaustion. */
+export function capacityAvailability(state: WorkshopState, c: ProviderCapacity): Availability {
+  if (c.configured === false || state.connection === 'disconnected' || state.connection === 'reconnecting' ||
+      !capacityFresh(state.now, c.lastCheckedAt, c.maxAgeMs) ||
+      c.availability.provenance === 'unknown' || c.availability.provenance === 'estimated') return 'unknown';
+  return c.availability.value ?? 'unknown';
 }

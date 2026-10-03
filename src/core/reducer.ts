@@ -237,6 +237,7 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
         id: e.taskId,
         businessId: e.businessId,
         title: String(p.title ?? 'Untitled task'),
+        parentTaskId: typeof p.parentTaskId === 'string' ? p.parentTaskId : undefined,
         acceptanceCriteria: ((p.criteria as string[]) ?? []).map((text) => ({ text, state: 'pending' as const })),
         stage,
         status: 'queued',
@@ -362,7 +363,7 @@ export function applyEvent(state: WorkshopState, raw: ActivityEvent): WorkshopSt
       const att = e.attemptId ? s.attempts[e.attemptId] : undefined;
       if (!att) break;
       if (att.outcome) break; // outcomes are write-once; a late duplicate cannot change them
-      s.attempts = { ...s.attempts, [att.id]: { ...att, endedAt: e.sourceTs, outcome: p.outcome as AttemptOutcome } };
+      s.attempts = { ...s.attempts, [att.id]: { ...att, endedAt: e.sourceTs, outcome: p.outcome as AttemptOutcome, provider: (p.provider as ProviderRef | undefined) ?? att.provider } };
       break;
     }
     case 'audit.findings': {
@@ -600,7 +601,7 @@ function describe(s: WorkshopState, e: ActivityEvent): TimelineEntry | null {
       text = `${who}: ${p.action}`;
       break;
     case 'attempt.finished':
-      text = `${who} finished attempt (${p.outcome})`;
+      text = `${who} finished attempt (${p.outcome ?? 'outcome not observed'})`;
       break;
     case 'audit.findings': {
       const open = ((p.findings as AuditFinding[]) ?? []).filter((f) => !f.resolved);

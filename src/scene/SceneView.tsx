@@ -162,6 +162,7 @@ export function SceneView() {
       last = now;
       frame++;
       const s = store.get();
+      canvas.dataset.actors=JSON.stringify(sc.actors.get(viewKey)?.positions()??[]);
       const u = ui.get();
       const t = store.adapter?.clock() ?? s.now;
       cam.update(now);
@@ -365,11 +366,13 @@ export function SceneView() {
         }
       }
     };
+    let enterTimer: ReturnType<typeof setTimeout> | undefined;
     const enterBuilding = (id: string) => {
+      if (enterTimer !== undefined) clearTimeout(enterTimer);
       const b = sc.campus.buildings.find((x) => x.id === id);
       if (b && motionEnabled()) {
         cam.animateTo(b.focus[0], b.focus[1], cam.scale * 2.2, 320, performance.now());
-        setTimeout(() => {
+        enterTimer = setTimeout(() => {
           sc.cameras.delete('campus'); // come back to the fitted campus view
           ui.go({ mode: 'interior', businessId: id });
         }, 300);
@@ -442,6 +445,8 @@ export function SceneView() {
     mini?.addEventListener('pointerdown', onMini);
     mini?.addEventListener('pointermove', onMini);
     return () => {
+      if (enterTimer !== undefined) clearTimeout(enterTimer);
+      delete (wrap as any).__enter;
       cancelAnimationFrame(raf);
       ro.disconnect();
       canvas.removeEventListener('pointerdown', onDown);
@@ -457,8 +462,8 @@ export function SceneView() {
   }, [ready, viewKey]);
 
   const enter = (id: string) => {
-    const enterBuilding = (wrapRef.current as any)?.__enter;
-    if (enterBuilding) enterBuilding(id);
+    const handler = (wrapRef.current as any)?.__enter;
+    if (typeof handler === 'function') handler(id);
     else ui.go({ mode: 'interior', businessId: id });
   };
   const sc = scenesRef.current;
@@ -543,7 +548,7 @@ function BuildingLabel({ id, anchor, hovered, onEnter, onHover, extra }: { id: s
   const state = useWorkshop((s) => s);
   const b = BUSINESS_BY_ID[id]!;
   const c = useMemo(() => businessCounts(state, id), [state, id]);
-  const live = state.connection !== 'disconnected';
+  const live = state.connection === 'demo' || (state.connection === 'connected' && (c.roster > 0 || Object.values(state.tasks).some(t => t.businessId === id)));
   const lock = b.brand.assets.lockupOnDark;
   const signals = buildingSignals(state,id);
   return (
@@ -564,7 +569,7 @@ function BuildingLabel({ id, anchor, hovered, onEnter, onHover, extra }: { id: s
           <span className={`dot ${c.active ? 'dot--on' : ''}`} aria-hidden="true" />
           {lock ? <img src={lock} alt={b.brand.displayName} className="blabel__lockup" /> : <span>{b.brand.displayName}</span>}
           {b.brand.provisional ? <span className="chip chip--prov">provisional</span> : null}
-          {id === 'aster-ledger' ? <span className="chip chip--paper">DEMO / PAPER</span> : null}
+          {id === 'aster-ledger' && state.connection === 'demo' ? <span className="chip chip--paper">DEMO / PAPER</span> : null}
         </span>
         <span className="blabel__counts">
           {live ? (
@@ -577,7 +582,7 @@ function BuildingLabel({ id, anchor, hovered, onEnter, onHover, extra }: { id: s
               <span className="muted">{c.roster} agents</span>
             </>
           ) : (
-            <span className="muted">{c.roster} declared agents · execution unobserved</span>
+            <span className="muted">status unknown · no telemetry / not connected</span>
           )}
         </span>
       </button>
@@ -591,7 +596,7 @@ function RoomLabel({ departmentId, anchor }: { departmentId: string; anchor: Pt 
   const state = useWorkshop((s) => s);
   const d = DEPARTMENT_BY_ID[departmentId]!;
   const c = useMemo(() => departmentCounts(state, departmentId), [state, departmentId]);
-  const live = state.connection !== 'disconnected';
+  const live = state.connection === 'demo' || (state.connection === 'connected' && Object.values(state.workers).some(w => w.businessId === d.businessId));
   const lounge = d.kind === 'lounge';
   return (
     <div className="anchor" data-ax={anchor[0]} data-ay={anchor[1]}>

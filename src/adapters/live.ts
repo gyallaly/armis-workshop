@@ -43,7 +43,7 @@ export class LiveBridgeAdapter implements WorkshopAdapter {
   constructor(private url: string) {}
   start(sink: AdapterSink) {
     this.stop();
-    diagnostics.reset();
+    diagnostics.reset(); diagnostics.update({endpoint:this.url});
     sink.connection('reconnecting');
     this.ready = false;
     this.stream = new EventSource(this.url, {withCredentials:true});

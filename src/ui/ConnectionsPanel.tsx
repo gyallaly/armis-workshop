@@ -10,8 +10,8 @@ export function ConnectionsPanel() {
   const d=useSyncExternalStore(diagnostics.subscribe,diagnostics.get);
   const now=Date.now();
   const live=state.connection==='connected' && d.lastValidAt!==null && now-d.lastValidAt<=90000;
-  const url=configuredBridgeUrl();
-  const endpoint=url ? new URL(url).origin : 'No endpoint configured';
+  const url=d.endpoint??configuredBridgeUrl();
+  const endpoint=url ? new URL(url,window.location.href).origin+new URL(url,window.location.href).pathname : 'No endpoint configured';
   const working=FEEDS.filter(([id])=>feedWorking(d.feeds[id],live,now)).length;
   return <section className="connections" aria-label="Mac mini connections">
     <h2>Mac mini connections</h2>

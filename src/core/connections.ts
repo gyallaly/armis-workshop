@@ -34,6 +34,7 @@ export interface FeedReport {
   detail: string;
 }
 export interface Diagnostics {
+  endpoint: string | null;
   acceptedSnapshots: number;
   acceptedEvents: number;
   rejectedMessages: number;
@@ -42,7 +43,7 @@ export interface Diagnostics {
   lastError: string | null;
   feeds: Partial<Record<FeedId,FeedReport>>;
 }
-const empty = (): Diagnostics => ({acceptedSnapshots:0,acceptedEvents:0,rejectedMessages:0,lastMessageAt:null,lastValidAt:null,lastError:null,feeds:{}});
+const empty = (): Diagnostics => ({endpoint:null,acceptedSnapshots:0,acceptedEvents:0,rejectedMessages:0,lastMessageAt:null,lastValidAt:null,lastError:null,feeds:{}});
 let value = empty();
 const listeners = new Set<()=>void>();
 export const diagnostics = {

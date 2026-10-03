@@ -84,6 +84,7 @@ describe('all declared agents have physical homes', () => {
     s = applyEvent(s,event('working','active')); actors.update(s,1000,false);
     const active = actors.positions().find(p => p.id === 'uditus.creator')!;
     expect(active.target).toMatch(/^seat:uditus:delivery/);
+    expect(active).toMatchObject({pose:'type',animated:false});
     // Worker-state envelope uses session identity, not payload guesswork.
     expect(observedSessions(s,'uditus')).toBe(0);
     s = {...s,now:1000 + STALE_AFTER_MS + 1}; actors.update(s,2000,true);

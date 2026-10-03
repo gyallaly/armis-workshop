@@ -16,7 +16,7 @@ export function reconcileCity(state: WorkshopState): CityIssue[] {
     if (!DEPARTMENT_BY_ID[w.homeDepartmentId] || DEPARTMENT_BY_ID[w.homeDepartmentId]?.businessId !== w.businessId)
       add('invalid-home',w.id,'Home workspace does not belong to this building.',w.businessId);
   }
-  for (const w of Object.values(state.workers)) if (!ORGANIZATION_ROLES.some(r => r.id === w.id)) add('undeclared-agent',w.id,'Identity is absent from the inspected Control registry.',w.businessId);
+  for (const w of Object.values(state.workers)) if (!ORGANIZATION_ROLES.some(r => r.id === w.id) && !(['armis.operator','armis.auditor','armis.finance-analyst','armis.evaluator','armis.prompt-engineer','hermes.default'].includes(w.id) && w.installation?.observed)) add('undeclared-agent',w.id,'Identity is absent from the inspected Control registry.',w.businessId);
   for (const st of Object.values(state.statuses)) {
     const w = state.workers[st.workerId];
     if (!w) { add('orphan-status',st.workerId,'Observation has no declared character.'); continue; }

@@ -3,6 +3,7 @@ for(const width of [1280,1440]) test(`connections show unverified Mac feeds red 
   const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
   await page.setViewportSize({width,height:900});
   await page.goto('/');
+  await page.getByLabel('Data source',{exact:true}).selectOption('demo');
   await page.getByRole('tab',{name:'Connections',exact:true}).click();
   const panel=page.getByRole('region',{name:'Mac mini connections'});
   await expect(panel.getByText('0 / 23 feeds verified')).toBeVisible();
@@ -10,7 +11,9 @@ for(const width of [1280,1440]) test(`connections show unverified Mac feeds red 
   await expect(panel.locator('.connection-row--bad')).toHaveCount(24);
   await expect(panel.getByText(/Simulated activity does not verify/)).toBeVisible();
   await page.getByLabel('Data source',{exact:true}).selectOption('live');
-  await expect(panel.getByText('No endpoint configured')).toBeVisible();
+  await expect(panel.getByText('http://127.0.0.1:4183/api/events',{exact:true})).toBeVisible();
+  await expect(panel.getByText('Disconnected / stale',{exact:true})).toBeVisible();
+  await expect(panel.getByText('0 / 23 feeds verified')).toBeVisible();
   await expect(panel.locator('.connection-row--ok')).toHaveCount(0);
   await expect(panel.getByRole('article',{name:'Measured AI usage: Not connected'})).toBeAttached();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);

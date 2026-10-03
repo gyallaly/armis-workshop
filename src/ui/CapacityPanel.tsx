@@ -1,5 +1,6 @@
-import type { Measured, Provenance, ProviderCapacity } from '../core/types';
-import { capacityConsumers, tasksWaitingOn } from '../core/selectors';
+import { Fragment } from 'react';
+import type { Availability, CapacityWindow, Measured, Provenance, ProviderCapacity } from '../core/types';
+import { capacityAvailability, capacityConsumers, capacityFresh, tasksWaitingOn } from '../core/selectors';
 import { Icon } from './Icon';
 import { ui, useUi, useWorkshop } from './store';
 import { clock, relTime } from './format';
@@ -19,13 +20,13 @@ function availLabel(a: ProviderCapacity['availability']['value']) {
   return a === 'available' ? 'Available' : a === 'limited' ? 'Limited' : a === 'unavailable' ? 'Unavailable' : 'Unknown';
 }
 
-function AvailBadge({ m }: { m: Measured<string> }) {
-  const v = (m.value ?? 'unknown') as string;
+function AvailBadge({ m }: { m: Measured<Availability> }) {
+  const v = m.value ?? 'unknown';
   const icon = v === 'available' ? 'check' : v === 'unavailable' ? 'close' : v === 'limited' ? 'minus' : 'info';
   return (
     <span className={`avail avail--${v}`}>
       <Icon name={icon} size={13} />
-      {availLabel(v as any)}
+      {availLabel(v)}
     </span>
   );
 }
@@ -39,14 +40,40 @@ function countdown(now: number, at: number | null): string {
   return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}:${String(ss).padStart(2, '0')}`;
 }
 
+function ObservedAt({ at }: { at: number | null }) {
+  return at === null ? <span className="muted">Unknown</span> :
+    <time className="mono" dateTime={new Date(at).toISOString()}>{new Date(at).toISOString()}</time>;
+}
+
+function WindowValue({ m, unit }: { m: Measured<number>; unit: CapacityWindow['unit'] }) {
+  return <>{m.value === null || m.provenance !== 'provider_reported' ? <span className="muted">Not reported</span> : `${m.value.toLocaleString()} ${unit}`}{' '}
+    <ProvTag p={m.provenance} />{m.note ? <div className="muted small">{m.note}</div> : null}</>;
+}
+
+function CapacityWindowRow({ window: w, now }: { window: CapacityWindow; now: number }) {
+  return <Fragment>
+    <dt>{w.label}</dt>
+    <dd>
+      <div>Remaining: <WindowValue m={w.remaining} unit={w.unit} /></div>
+      <div>Limit: <WindowValue m={w.limit} unit={w.unit} /></div>
+      <div className="muted small">Scope: {w.scope} · Unit: {w.unit}</div>
+      <div className="muted small">Source: {w.source || 'Unknown'}</div>
+      <div className="muted small">Observed: <ObservedAt at={w.observedAt} /> · {w.observedAt === null ? 'Unknown freshness' : capacityFresh(now, w.observedAt, w.maxAgeMs) ? 'Fresh' : 'Stale'} (max age {w.maxAgeMs} ms)</div>
+      <div>Reset: {w.resetAt.value === null || w.resetAt.provenance === 'unknown' ? 'Unknown' :
+        w.resetAt.value <= now ? 'Reset time passed; recovery not observed' : `in ${countdown(now, w.resetAt.value)} (${new Date(w.resetAt.value).toISOString()})`}{' '}
+        <ProvTag p={w.resetAt.provenance} />{w.resetAt.note ? <div className="muted small">{w.resetAt.note}</div> : null}</div>
+    </dd>
+  </Fragment>;
+}
+
 export function CapacityPanel() {
   const state = useWorkshop((s) => s);
   const caps = Object.values(state.capacity);
-  const demo = useUi(s => s.prefs.source === 'demo');
+  const demo = useUi((s) => s.prefs.source) === 'demo';
   return (
     <section className="cap" aria-labelledby="cap-h">
       <h2 id="cap-h" className="panel__h">
-        AI provider capacity
+        AI provider capacity {demo ? <span className="chip chip--demo">DEMO</span> : null}
       </h2>
       <p className="note">
         Capacity is tracked per provider scope and shared by every worker on that scope - it is never split into per-worker allowances. Remaining
@@ -67,9 +94,13 @@ export function CapacityPanel() {
                   {c.scope.kind} scope · {c.scope.label}
                 </div>
               </div>
-              <AvailBadge m={c.availability as Measured<string>} />
+              <AvailBadge m={{ ...c.availability, value: capacityAvailability(state, c) }} />
             </header>
             <dl className="kv">
+              <dt>Configuration</dt>
+              <dd>{c.configured === true ? 'Configured' : c.configured === false ? 'Not configured' : 'Unknown'}</dd>
+              <dt>Capacity source</dt>
+              <dd>{c.source || 'Unknown'}</dd>
               <dt>Availability source</dt>
               <dd>
                 <ProvTag p={c.availability.provenance} /> {c.availability.note ? <span className="muted">{c.availability.note}</span> : null}
@@ -78,6 +109,7 @@ export function CapacityPanel() {
               <dd>
                 {c.models.join(', ')} {c.modelsIllustrative ? <span className="chip chip--demo">illustrative</span> : null}
               </dd>
+              {c.windows !== undefined ? c.windows.map((w) => <CapacityWindowRow key={w.id} window={w} now={state.now} />) : <>
               <dt>Remaining</dt>
               <dd>
                 {c.remaining.value === null ? <span className="muted">Not reported</span> : `${c.remaining.value.toLocaleString()} ${c.remaining.unit ?? ''}`}{' '}
@@ -86,8 +118,10 @@ export function CapacityPanel() {
               </dd>
               <dt>Resets</dt>
               <dd>
-                {c.resetAt.value === null ? (
+                {c.resetAt.value === null || c.resetAt.provenance === 'unknown' ? (
                   <span className="muted">Unknown</span>
+                ) : c.resetAt.value <= state.now ? (
+                  <span className="muted">Reset time passed; recovery not observed</span>
                 ) : (
                   <>
                     in <strong className="mono">{countdown(state.now, c.resetAt.value)}</strong> <span className="muted">({clock(c.resetAt.value)})</span>
@@ -95,9 +129,13 @@ export function CapacityPanel() {
                 )}{' '}
                 <ProvTag p={c.resetAt.provenance} />
               </dd>
+              </>}
               <dt>Local usage</dt>
               <dd>
-                {c.local.requests.value ?? 0} requests · {(c.local.tokens.value ?? 0).toLocaleString()} tokens <ProvTag p="locally_measured" />
+                {`${c.local.requests.value === null || c.local.requests.provenance === 'unknown' ? 'Unknown' : c.local.requests.value.toLocaleString()} requests`}{' '}
+                <ProvTag p={c.local.requests.provenance} /> ·{' '}
+                {`${c.local.tokens.value === null || c.local.tokens.provenance === 'unknown' ? 'Unknown' : c.local.tokens.value.toLocaleString()} tokens`}{' '}
+                <ProvTag p={c.local.tokens.provenance} />
                 <div className="muted small">{c.local.windowLabel}; not a quota</div>
               </dd>
               <dt>Fallback</dt>
@@ -108,7 +146,7 @@ export function CapacityPanel() {
                 {waiting.length ? <div className="warn small">{waiting.length} task{waiting.length > 1 ? 's' : ''} waiting for eligible capacity</div> : null}
               </dd>
               <dt>Last checked</dt>
-              <dd>{c.lastCheckedAt ? `${relTime(state.now, c.lastCheckedAt)} (${clock(c.lastCheckedAt)})` : <span className="muted">Never</span>}</dd>
+              <dd><ObservedAt at={c.lastCheckedAt} /> {c.lastCheckedAt !== null ? relTime(state.now, c.lastCheckedAt) : null}</dd>
             </dl>
           </article>
         );
@@ -120,21 +158,24 @@ export function CapacityPanel() {
 /** Compact HQ indicator shown on the campus. */
 export function CapacityChip() {
   const state = useWorkshop((s) => s);
+  const demo = useUi((s) => s.prefs.source) === 'demo';
   const caps = Object.values(state.capacity);
   return (
     <button className="capchip" onClick={() => ui.setPrefs({ tab: 'capacity' })} aria-label="Open AI capacity panel">
       <span className="capchip__h">
-        <Icon name="capacity" size={13} /> AI capacity
+        <Icon name="capacity" size={13} /> AI capacity {demo ? <span className="chip chip--demo">DEMO</span> : null}
       </span>
       {caps.length ? (
-        caps.map((c) => (
-          <span key={c.id} className={`capchip__row avail--${c.availability.value ?? 'unknown'}`}>
+        caps.map((c) => {
+          const availability = capacityAvailability(state, c);
+          return <span key={c.id} className={`capchip__row avail--${availability}`}>
             <span className="capchip__p">{c.provider}</span>
-            <span>{availLabel(c.availability.value)}</span>
-            {c.availability.value === 'unavailable' && c.resetAt.value !== null ? <span className="mono">resets {countdown(state.now, c.resetAt.value)}</span> : null}
-            {c.availability.value === 'unavailable' && c.resetAt.value === null ? <span className="muted">reset unknown</span> : null}
-          </span>
-        ))
+            <span>{availLabel(availability)}</span>
+            {availability === 'unavailable' && c.resetAt.value !== null && c.resetAt.provenance !== 'unknown' ?
+              <span className="mono">{c.resetAt.value <= state.now ? 'recovery not observed' : `reset hint ${countdown(state.now, c.resetAt.value)}`}</span> : null}
+            {availability === 'unavailable' && (c.resetAt.value === null || c.resetAt.provenance === 'unknown') ? <span className="muted">reset unknown</span> : null}
+          </span>;
+        })
       ) : (
         <span className="muted">unknown</span>
       )}

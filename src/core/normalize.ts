@@ -1,76 +1,164 @@
-import type { ActivityEvent, ActivityEventType, Snapshot, TaskStatus, WorkerState } from './types';
-const TYPES = new Set<ActivityEventType>(['task.created','task.assigned','task.handoff','task.status','task.ready','attempt.started','attempt.action','attempt.finished','audit.findings','criteria.updated','artifact.recorded','worker.state','worker.heartbeat','capacity.updated','redirect.acknowledged','redirect.applied','redirect.rejected','ledger.updated']);
-const WORKER_STATES = new Set<WorkerState>(['active','idle','waiting_provider','waiting_approval','failed','offline','unknown']);
-const TASK_STATUSES = new Set<TaskStatus>(['queued','in_progress','waiting_provider','waiting_approval','held','failed','ready','rejected']);
-const STAGES = new Set(['unknown','research','creation','audit','fixes','ready','feeds','rules','trader_watch','portfolio','rejected']);
-const OUTCOMES = new Set(['handoff','failed_audit','repaired','ready','dispatched','rejected']);
-const PROVENANCE = new Set(['provider_reported','locally_measured','estimated','unknown']);
-type Obj = Record<string, any>;
-const obj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
-const str = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
-const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const strings = (v: unknown) => Array.isArray(v) && v.every(x => typeof x === 'string');
-const measured = (v: unknown, valid: (x: any) => boolean) => obj(v) && PROVENANCE.has(v.provenance) && (v.value === null || valid(v.value));
-const provider = (v: unknown) => v === undefined || (obj(v) && str(v.provider) && PROVENANCE.has(v.modelProvenance));
-const criteria = (v: unknown) => Array.isArray(v) && v.every(x => obj(x) && typeof x.text === 'string' && ['pending','in_progress','met','unmet'].includes(x.state));
-const findings = (v: unknown) => Array.isArray(v) && v.every(x => obj(x) && str(x.id) && ['critical','serious','moderate','minor'].includes(x.severity) && typeof x.summary === 'string' && typeof x.resolved === 'boolean');
-const artifact = (v: unknown) => obj(v) && str(v.id) && str(v.taskId) && ['markdown','report','diff','log'].includes(v.kind) && typeof v.title === 'string' && typeof v.preview === 'string' && num(v.recordedAt) && typeof v.illustrative === 'boolean';
-const capacity = (v: unknown) => obj(v) && str(v.id) && str(v.provider) && obj(v.scope) && ['account','project','organization'].includes(v.scope.kind) && str(v.scope.label) && strings(v.models) && typeof v.modelsIllustrative === 'boolean' && measured(v.availability,x => ['available','limited','unavailable','unknown'].includes(x)) && measured(v.remaining,x => num(x) && x >= 0) && measured(v.resetAt,num) && obj(v.local) && measured(v.local.requests,x => num(x) && x >= 0) && measured(v.local.tokens,x => num(x) && x >= 0) && typeof v.local.windowLabel === 'string' && (v.lastCheckedAt === null || num(v.lastCheckedAt));
-const ledger = (v: unknown) => obj(v) && v.paper === true && ['positions','news','traders','sources','venues','equityHistory','operatingCosts','history'].every(k => Array.isArray(v[k])) && obj(v.candidates) && ['startingBankroll','available','reserved','realized','unrealized','drawdownPct','peakEquity','updatedAt'].every(k=>num(v[k]));
-function validLedger(v: unknown): boolean {
- if (!ledger(v) || !obj(v)) return false;
- const textFields = (x: unknown, keys: string[]) => obj(x) && keys.every(k => typeof x[k] === 'string');
- const numberFields = (x: unknown, keys: string[]) => obj(x) && keys.every(k => num(x[k]));
- const nullable = (x: unknown) => x === null || num(x);
- if (!v.venues.every((x: unknown) => textFields(x,['id','name','jurisdiction','note']))) return false;
- if (!v.positions.every((x: unknown) => textFields(x,['id','candidateId','contract','venueId','side','recommendation','rationale']) && numberFields(x,['qty','avgPrice','mark','netExitValue']))) return false;
- if (!v.news.every((x: unknown) => textFields(x,['id','headline','source']) && numberFields(x,['publishedAt','observedAt']) && obj(x) && strings(x.contradicts))) return false;
- if (!v.traders.every((x: unknown) => textFields(x,['id','handle','summary','source']) && numberFields(x,['observedAt']))) return false;
- if (!v.sources.every((x: unknown) => textFields(x,['id','label','state']) && obj(x) && nullable(x.lastAt))) return false;
- if (!v.equityHistory.every((x: unknown) => numberFields(x,['at','equity'])) || !v.history.every((x: unknown) => numberFields(x,['at']) && textFields(x,['text']))) return false;
- if (!v.operatingCosts.every((x: unknown) => textFields(x,['label']) && numberFields(x,['amount']) && obj(x) && PROVENANCE.has(x.provenance))) return false;
- return Object.values(v.candidates).every((x: unknown) => {
-  if (!obj(x) || !textFields(x,['taskId','question','side','decision']) || !strings(x.newsIds) || !Array.isArray(x.quotes) || (x.estimate !== undefined && !num(x.estimate))) return false;
-  return x.quotes.every((q: unknown) => obj(q) && textFields(q,['venueId','contractLabel','ruleCompat','ruleNote']) && ['bid','ask','feePct','depth','quoteAt','netAsk'].every(k=>nullable(q[k])) && (q.bid === null || q.ask !== null) && (q.feePct === null || q.netAsk !== null) && v.venues.some((venue: Obj)=>venue.id === q.venueId));
- });
-}
+import type { ActivityEvent, ActivityEventType, Snapshot } from './types';
 
-/** Drop malformed inputs before any reducer mutation; only explicit task.ready establishes readiness. */
-export function normalizeEvent(raw: unknown): ActivityEvent | null {
- if (!obj(raw) || !str(raw.id) || !TYPES.has(raw.type) || !num(raw.sourceTs) || !num(raw.receivedTs) || !str(raw.businessId) || !obj(raw.payload)) return null;
- const e = raw as ActivityEvent, p = raw.payload;
- if (['workerId','taskId','attemptId','sessionId'].some(k=>raw[k] !== undefined && !str(raw[k]))) return null;
- if (e.type.startsWith('task.') && !str(e.taskId)) return null;
- if (p.provider !== undefined && !provider(p.provider)) return null;
- switch(e.type) {
- case 'worker.state': if (!e.workerId || (p.departmentId !== undefined && !str(p.departmentId))) return null; return {...e,payload:{...p,state:WORKER_STATES.has(p.state)?p.state:'unknown'}};
- case 'worker.heartbeat': if(!e.workerId) return null; break;
- case 'task.status': if (!TASK_STATUSES.has(p.status) || p.status === 'ready') return null; break;
- case 'task.handoff': if ((!STAGES.has(p.from) && p.from !== 'hq') || (!STAGES.has(p.to) && p.to !== 'hq') || (p.outcome !== undefined && !OUTCOMES.has(p.outcome)) || (p.durationMs !== undefined && (!num(p.durationMs) || p.durationMs <= 0))) return null; break;
- case 'task.created': if ((p.stage !== undefined && !STAGES.has(p.stage)) || (p.criteria !== undefined && !strings(p.criteria)) || (p.eligibleCapacity !== undefined && !strings(p.eligibleCapacity)) || (p.maxRepairs !== undefined && (!Number.isSafeInteger(p.maxRepairs) || p.maxRepairs < 0))) return null; break;
- case 'task.assigned': if (!e.workerId || (p.stage !== undefined && !STAGES.has(p.stage))) return null; break;
- case 'attempt.finished': if (!e.attemptId || !['passed','failed','aborted','superseded','completed'].includes(p.outcome)) return null; break;
- case 'audit.findings': if(!e.taskId || !findings(p.findings)) return null; break;
- case 'criteria.updated': if(!e.taskId || !criteria(p.criteria)) return null; break;
- case 'artifact.recorded': if(!artifact(p.artifact)) return null; break;
- case 'capacity.updated': if(!capacity(p.capacity)) return null; break;
- case 'ledger.updated': if(!validLedger(p.book)) return null; break;
- case 'redirect.acknowledged': case 'redirect.applied': case 'redirect.rejected': if(!str(p.redirectId)) return null; break;
- }
- return e;
-}
+/** Hard rejection limits, not truncation: an incomplete observation is misleading. */
+export const VALIDATION_LIMITS = { id: 128, text: 512, preview: 8192, items: 64 } as const;
 
-/** Snapshots are atomic: reject malformed collections instead of partially replacing observed state. */
+type Parser = (value: unknown) => unknown;
+type Shape = Record<string, Parser>;
+const INVALID = new Error('Invalid viewer record');
+const fail = (): never => { throw INVALID; };
+const SECRET = /(?:\b(?:authorization\s*[:=]|cookie\s*[:=]|bearer\s+\S+)|\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|token|password|passwd|secret|credentials?)\s*["']?\s*[:=]\s*\S+|\b(?:sk-(?:proj-|ant-)?[a-z0-9_-]{6,}|gh[pousr]_[a-z0-9]{8,}|github_pat_[a-z0-9_]{8,}|AKIA[A-Z0-9]{16})\b|-----BEGIN [A-Z ]*PRIVATE KEY-----|\beyJ[a-z0-9_-]+\.[a-z0-9_-]+\.[a-z0-9_-]+\b|https?:\/\/[^\s/]+:[^\s/]+@)/i;
+
+function text(max: number = VALIDATION_LIMITS.text, empty = false): Parser {
+  return (v) => typeof v === 'string' && v.length <= max && (empty || v.trim().length > 0) && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v) && !SECRET.test(v) ? v : fail();
+}
+const id: Parser = (v) => {
+  const s = text(VALIDATION_LIMITS.id)(v) as string;
+  return /^[a-zA-Z0-9][a-zA-Z0-9_@.:/-]*$/.test(s) && !['__proto__', 'constructor', 'prototype'].includes(s) ? s : fail();
+};
+const number: Parser = (v) => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= Number.MAX_SAFE_INTEGER ? v : fail();
+const nonnegative: Parser = (v) => (number(v) as number) >= 0 ? v : fail();
+const integer: Parser = (v) => Number.isSafeInteger(nonnegative(v)) ? v : fail();
+const boolean: Parser = (v) => typeof v === 'boolean' ? v : fail();
+const enumOf = (...values: (string | boolean)[]): Parser => (v) => values.includes(v as string) ? v : fail();
+const optional = (parse: Parser): Parser => (v) => v === undefined ? undefined : parse(v);
+const nullable = (parse: Parser): Parser => (v) => v === null ? null : parse(v);
+const list = (parse: Parser, max: number = VALIDATION_LIMITS.items): Parser => (v) => {
+  if (!Array.isArray(v) || v.length > max) return fail();
+  // Array.map skips holes. Read every index so sparse arrays cannot pass validation.
+  return Array.from(v, (item) => parse(item));
+};
+function record(v: unknown): Record<string, unknown> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return fail();
+  const proto = Object.getPrototypeOf(v);
+  if (proto !== Object.prototype && proto !== null) return fail();
+  return v as Record<string, unknown>;
+}
+function own(v: Record<string, unknown>, key: string): unknown {
+  const property = Object.getOwnPropertyDescriptor(v, key);
+  if (property && !('value' in property)) return fail();
+  return property?.value;
+}
+const object = (shape: Shape): Parser => (v) => {
+  const input = record(v);
+  const result: Record<string, unknown> = {};
+  for (const [key, parse] of Object.entries(shape)) {
+    const value = parse(own(input, key));
+    if (value !== undefined) result[key] = value;
+  }
+  return result;
+};
+
+const dictionary = (parse: Parser, max: number): Parser => (v) => {
+  const input = record(v);
+  const keys = Object.keys(input);
+  if (keys.length > max) return fail();
+  const result: Record<string, unknown> = {};
+  for (const key of keys) { id(key); result[key] = parse(own(input, key)); }
+  return result;
+};
+
+const stage = enumOf('unknown', 'research', 'creation', 'audit', 'fixes', 'ready', 'feeds', 'rules', 'trader_watch', 'portfolio', 'rejected');
+const route = enumOf('unknown', 'hq', 'research', 'creation', 'audit', 'fixes', 'ready', 'feeds', 'rules', 'trader_watch', 'portfolio', 'rejected');
+const workerState = enumOf('active', 'idle', 'waiting_provider', 'waiting_approval', 'failed', 'offline', 'unknown');
+const taskStatus = enumOf('queued', 'in_progress', 'waiting_provider', 'waiting_approval', 'held', 'failed', 'ready', 'rejected');
+const provenance = enumOf('provider_reported', 'locally_measured', 'estimated', 'unknown');
+const outcome = enumOf('passed', 'failed', 'aborted', 'superseded', 'completed');
+const provider = object({ provider: text(128), model: optional(text(128)), capacityId: optional(id), modelProvenance: provenance });
+const finding = object({ id, severity: enumOf('critical', 'serious', 'moderate', 'minor'), summary: text(), resolved: boolean });
+const criterion = object({ text: text(), state: enumOf('pending', 'in_progress', 'met', 'unmet') });
+const artifact = object({ id, taskId: id, attemptId: optional(id), kind: enumOf('markdown', 'report', 'diff', 'log'), title: text(), preview: text(VALIDATION_LIMITS.preview, true), recordedAt: integer, illustrative: boolean });
+const measured = (value: Parser, extra: Shape = {}): Parser => object({ value: nullable(value), provenance, note: optional(text()), ...extra });
+const capacity = object({
+  id, provider: text(128), scope: object({ kind: enumOf('account', 'project', 'organization'), label: text() }),
+  models: list(text(128)), modelsIllustrative: boolean,
+  availability: measured(enumOf('available', 'limited', 'unavailable', 'unknown')),
+  remaining: measured(nonnegative, { unit: optional(enumOf('requests', 'tokens')) }), resetAt: measured(integer),
+  local: object({ requests: measured(integer), tokens: measured(integer), windowLabel: text(512, true) }),
+  fallbackCapacityId: optional(id), fallbackNote: optional(text()), lastCheckedAt: nullable(integer),
+  configured: optional(boolean), source: optional(text()), maxAgeMs: optional(integer),
+  windows: optional(list(object({ id, label: text(), scope: text(), unit: enumOf('requests', 'input_tokens', 'percent', 'tokens'), remaining: measured(nonnegative), limit: measured(nonnegative), resetAt: measured(integer), observedAt: nullable(integer), source: text(), maxAgeMs: integer }))),
+});
+
+const side = enumOf('YES', 'NO');
+const quote = object({ venueId: id, contractLabel: text(), ruleCompat: enumOf('compatible', 'differs', 'unverified'), ruleNote: text(), bid: nullable(nonnegative), ask: nullable(nonnegative), feePct: nullable(nonnegative), depth: nullable(nonnegative), quoteAt: nullable(integer), netAsk: nullable(nonnegative) });
+const candidate = object({ taskId: id, question: text(), side, quotes: list(quote), bestVenueId: nullable(id), decision: enumOf('pending', 'paper_entry', 'no_trade', 'rejected'), reason: optional(text()), newsIds: list(id), estimate: optional(nonnegative) });
+const ledger = object({
+  paper: enumOf(true), startingBankroll: nonnegative, available: number, reserved: nonnegative, realized: number, unrealized: number, drawdownPct: nonnegative, peakEquity: nonnegative,
+  equityHistory: list(object({ at: integer, equity: number }), 256),
+  operatingCosts: list(object({ label: text(), amount: nonnegative, provenance })),
+  venues: list(object({ id, name: text(), jurisdiction: text(), note: text(), configured: boolean })),
+  candidates: dictionary(candidate, 256),
+  news: list(object({ id, headline: text(), source: text(), primary: boolean, publishedAt: integer, observedAt: integer, contradicts: list(id), candidateId: optional(id) }), 256),
+  traders: list(object({ id, handle: text(), summary: text(), observedAt: integer, source: text() }), 256),
+  positions: list(object({ id, candidateId: id, contract: text(), venueId: id, side, qty: nonnegative, avgPrice: nonnegative, mark: nonnegative, recommendation: enumOf('hold', 'reduce', 'close'), rationale: text(), netExitValue: number, liquidityWarning: optional(text()), pairedWith: optional(id), hedgeWarning: optional(text()), exit: optional(object({ requestedQty: nonnegative, filledQty: nonnegative, status: enumOf('partial', 'filled'), note: text() })) }), 256),
+  sources: list(object({ id, label: text(), lastAt: nullable(integer), state: enumOf('fresh', 'stale', 'conflicting', 'unknown') })),
+  history: list(object({ at: integer, text: text() }), 256), updatedAt: integer,
+});
+const redirectState = enumOf('requested', 'acknowledged', 'applied', 'rejected');
+const redirect = object({ id, workerId: id, taskId: id, attemptId: optional(id), instruction: text(), state: redirectState, simulated: enumOf(true), history: list(object({ state: redirectState, at: integer, note: optional(text()) }), 16), reason: optional(text()) });
+
+const payloads: Record<ActivityEventType, Parser> = {
+  'task.created': object({ parentTaskId: optional(id), title: text(), criteria: optional(list(text())), stage: optional(stage), maxRepairs: optional(integer), eligibleCapacity: optional(list(id)), mandateId: optional(id), source: optional(text()) }),
+  'task.assigned': object({ stage: optional(stage), provider: optional(provider), workerId: optional(id) }),
+  'task.handoff': object({ from: route, to: route, outcome: optional(enumOf('handoff', 'failed_audit', 'repaired', 'ready', 'dispatched', 'rejected')), durationMs: optional(integer) }),
+  'task.status': object({ status: taskStatus, reason: optional(text()) }),
+  'task.ready': object({}),
+  'attempt.started': object({ stage: optional(stage), provider: optional(provider) }),
+  'attempt.action': object({ action: text(), tool: optional(text()) }),
+  'attempt.finished': object({ outcome: optional(outcome), provider: optional(provider) }),
+  'audit.findings': object({ findings: list(finding) }),
+  'criteria.updated': object({ criteria: list(criterion) }),
+  'artifact.recorded': object({ artifact }),
+  'worker.state': object({ state: workerState, departmentId: optional(id), provider: optional(provider), action: optional(text()), tool: optional(text()) }),
+  'worker.heartbeat': object({}),
+  'capacity.updated': object({ capacity }),
+  'redirect.acknowledged': object({ redirectId: id, instruction: optional(text()), reason: optional(text()) }),
+  'redirect.applied': object({ redirectId: id, instruction: optional(text()), reason: optional(text()) }),
+  'redirect.rejected': object({ redirectId: id, instruction: optional(text()), reason: optional(text()) }),
+  // Demo-only contract; the Live transport must reject this type before delivery.
+  'ledger.updated': object({ book: ledger }),
+};
+
+const worker = object({
+  id, name: text(128), businessId: id, role: text(), homeDepartmentId: id, reportsTo: optional(nullable(id)), mandate: optional(text()),
+  installation: optional(object({defined: boolean, installed: nullable(boolean), observed: boolean, roleBinding: enumOf('verified', 'unbound', 'unknown'), source: text()})),
+  appearance: object({ skin: text(32), hair: text(32), hairStyle: enumOf('short', 'curly', 'long', 'bun', 'mohawk', 'bald', 'bob'), shirt: text(32), pants: text(32), accessory: optional(enumOf('glasses', 'headphones', 'beanie', 'none')) }),
+});
+const status = object({ workerId: id, state: workerState, departmentId: id, taskId: optional(id), attemptId: optional(id), sessionId: optional(id), provider: optional(provider), action: optional(text()), tool: optional(text()), stateSince: integer, lastObservedAt: integer });
+const task = object({
+  id, parentTaskId: optional(id), unreportedFields: optional(list(text())), businessId: id, title: text(), acceptanceCriteria: list(criterion), stage, status: taskStatus,
+  assignedWorkerId: optional(id), attemptIds: list(id, 1024), findings: list(finding), artifactIds: list(id),
+  repairCount: integer, maxRepairs: integer, eligibleCapacity: list(id), heldReason: optional(text()), createdAt: integer, updatedAt: integer,
+  mandateId: optional(id), source: optional(text()),
+});
+const attempt = object({ id, taskId: id, workerId: id, sessionId: optional(id), stage, startedAt: integer, endedAt: optional(integer), outcome: optional(outcome), provider: optional(provider) });
+const timeline = object({ eventId: id, at: integer, type: enumOf(...Object.keys(payloads)), businessId: id, workerId: optional(id), taskId: optional(id), text: text() });
+const snapshot = object({
+  takenAt: integer, workers: list(worker, 256), statuses: list(status, 256), tasks: list(task, 120),
+  attempts: list(attempt, 1024), artifacts: list(artifact, 1024), capacity: list(capacity), timeline: optional(list(timeline, 300)),
+  redirects: optional(list(redirect, 50)), ledger: optional(dictionary(ledger, 64)),
+});
+
+/** Atomic snapshot validation: one malformed entity rejects the whole snapshot. */
 export function normalizeSnapshot(raw: unknown): Snapshot | null {
- if(!obj(raw) || !num(raw.takenAt)) return null;
- if(!['workers','statuses','tasks','attempts','artifacts','capacity'].every(k=>Array.isArray(raw[k]))) return null;
- if(!raw.workers.every((w: Obj)=>obj(w) && str(w.id) && str(w.name) && str(w.businessId) && str(w.role) && str(w.homeDepartmentId) && obj(w.appearance) && ['skin','hair','shirt','pants'].every(k=>str(w.appearance[k])) && ['short','curly','long','bun','mohawk','bald','bob'].includes(w.appearance.hairStyle))) return null;
- if(!raw.statuses.every((s: Obj)=>obj(s) && str(s.workerId) && WORKER_STATES.has(s.state) && str(s.departmentId) && num(s.stateSince) && num(s.lastObservedAt) && provider(s.provider))) return null;
- if(!raw.tasks.every((t: Obj)=>obj(t) && str(t.id) && str(t.businessId) && typeof t.title === 'string' && STAGES.has(t.stage) && TASK_STATUSES.has(t.status) && criteria(t.acceptanceCriteria) && findings(t.findings) && ['attemptIds','artifactIds','eligibleCapacity'].every(k=>strings(t[k])) && ['repairCount','maxRepairs','createdAt','updatedAt'].every(k=>num(t[k])))) return null;
- if(!raw.attempts.every((a: Obj)=>obj(a) && ['id','taskId','workerId'].every(k=>str(a[k])) && (a.sessionId === undefined || str(a.sessionId)) && STAGES.has(a.stage) && num(a.startedAt) && (a.endedAt === undefined || num(a.endedAt)) && (a.outcome === undefined || ['passed','failed','aborted','superseded','completed'].includes(a.outcome)) && provider(a.provider))) return null;
- if(!raw.artifacts.every(artifact) || !raw.capacity.every(capacity)) return null;
- if(raw.timeline !== undefined && (!Array.isArray(raw.timeline) || !raw.timeline.every((t:Obj)=>obj(t) && str(t.eventId) && num(t.at) && TYPES.has(t.type) && str(t.businessId) && typeof t.text === 'string'))) return null;
- if(raw.redirects !== undefined && (!Array.isArray(raw.redirects) || !raw.redirects.every((r:Obj)=>obj(r) && str(r.id) && str(r.workerId) && str(r.taskId) && typeof r.instruction === 'string' && ['requested','acknowledged','applied','rejected'].includes(r.state) && typeof r.simulated === 'boolean' && Array.isArray(r.history) && r.history.every((h:Obj)=>obj(h) && num(h.at) && ['requested','acknowledged','applied','rejected'].includes(h.state))))) return null;
- if(raw.ledger !== undefined && (!obj(raw.ledger) || !Object.values(raw.ledger).every(validLedger))) return null;
- return raw as Snapshot;
+  try { return snapshot(raw) as Snapshot; } catch { return null; }
+}
+
+const envelope = object({ id, type: enumOf(...Object.keys(payloads)), sourceTs: integer, receivedTs: integer, businessId: id, workerId: optional(id), taskId: optional(id), attemptId: optional(id), sessionId: optional(id) });
+
+/** Validate unknown input and copy only observable allowlisted fields. No defaults. */
+export function normalizeEvent(raw: unknown): ActivityEvent | null {
+  try {
+    const input = record(raw);
+    const event = envelope(input) as ActivityEvent;
+    const type = event.type;
+    if ((type.startsWith('task.') || ['audit.findings', 'criteria.updated', 'artifact.recorded'].includes(type)) && !event.taskId) return null;
+    if ((type.startsWith('worker.') || type === 'task.assigned' || type === 'attempt.action' || type.startsWith('redirect.')) && !event.workerId) return null;
+    if ((type === 'attempt.started' || type === 'attempt.finished') && !event.attemptId) return null;
+    event.payload = payloads[type](own(input, 'payload')) as Record<string, unknown>;
+    if (type === 'task.status' && event.payload.status === 'ready') return null;
+    if (type === 'artifact.recorded' && (event.payload.artifact as Record<string, unknown>).taskId !== event.taskId) return null;
+    return event;
+  } catch { return null; }
 }
