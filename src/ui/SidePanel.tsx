@@ -12,6 +12,7 @@ import { Icon } from './Icon';
 import { store, ui, useUi, useWorkshop } from './store';
 import { OrganizationPanel } from './OrganizationPanel';
 import { RuntimePanel } from './RuntimePanel';
+import { CurrentWorkPanel } from './CurrentWorkPanel';
 
 export const STATE_ICON: Record<WorkerState, string> = {
   active: 'bolt',
@@ -403,6 +404,7 @@ function Feed({ state }: { state: WorkshopState }) {
   const roster = biz ? workersIn(state, biz) : [];
   return (
     <section className="detail" aria-labelledby="feed-h">
+      <CurrentWorkPanel />
       <RuntimePanel />
       <OrganizationPanel businessId={biz} />
       {biz ? (

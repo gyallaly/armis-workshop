@@ -76,6 +76,12 @@ it('additional evidence endpoint remains same-origin authenticated and reports a
  expect((await get(port,'/api/evidence',{Cookie:cookie,Origin:'https://foreign.example'})).status).toBe(403);
  expect((await get(port,'/api/evidence',{Cookie:cookie},'POST')).status).toBe(405);
 });
+it('ordinary-work endpoint is read-only, authenticated and optional',async()=>{
+ const {port}=await start();expect((await get(port,'/api/current-work')).status).toBe(401);
+ const cookie=await session(port),response=await get(port,'/api/current-work',{Cookie:cookie});
+ expect(response.status).toBe(200);expect(JSON.parse(response.body).state).toBe('unavailable');
+ expect((await get(port,'/api/current-work',{Cookie:cookie},'POST')).status).toBe(405);
+});
 async function start(dbPath?: string) {
   const server = createViewerServer({ dist: dir, dbPath, port: 0 });
   servers.push(server);

@@ -21,7 +21,7 @@ export default defineConfig({
   webServer: {
     command: 'npm run build && npm run serve:live',
     url: `http://127.0.0.1:${port}`,
-    env: { PORT: String(port), ARMIS_VIEWER_DB: '', ARMIS_HERMES_DB: '', ARMIS_HERMES_SESSION_ID: '', ARMIS_UDITUS_ENV_PATH: '' },
+    env: { PORT: String(port), ARMIS_VIEWER_DB: '', ARMIS_HERMES_DB: '', ARMIS_HERMES_SESSION_ID: '', ARMIS_UDITUS_ENV_PATH: '', ARMIS_CURRENT_WORK_DB: '', ARMIS_CURRENT_WORK_CHAT_ID: '', ARMIS_CURRENT_WORK_THREAD_ID: '' },
     reuseExistingServer: false,
     timeout: 60_000,
   },

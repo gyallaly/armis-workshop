@@ -39,10 +39,12 @@ export function RuntimePanel(){
    <h3>Operations → worker → independent review</h3>
    {data?.setup.state==='unavailable'?<p>{data.setup.gap}</p>:data?.setup.state==='connected'?<>
     <p>Durable setup journal. Results are internal only and are not released. A finished call is not independent acceptance.</p>
+    <p>Execution health: {data.setup.executionHealth.state} · {data.setup.executionHealth.running} running · {data.setup.executionHealth.held} held · {data.setup.executionHealth.completed} completed.</p>
     {data.setup.workflows.map(w=><details key={w.id}><summary><code>{w.id}</code> · {w.state} · review {w.reviewPassed===null?'not observed':w.reviewPassed?'passed':'failed'}</summary>
      <pre style={{whiteSpace:'pre-wrap'}}>{w.result}</pre>
      <p>Independent review issues: {w.reviewIssueCount??'unknown'} · External release: disabled</p>
-     <ol>{data.setup.state==='connected'&&data.setup.calls.filter(c=>c.workflowId===w.id).sort((a,b)=>(a.startedAt??0)-(b.startedAt??0)).map(c=><li key={c.id}>{c.phase} · <code>{c.roleId}</code> · {c.state}<br/>Requested: {c.requestedModel??'unknown'}<br/>Observed: {c.actualProvider??'unknown'} / {c.actualModel??'unknown'} · tokens {c.inputTokens??'unknown'} in / {c.outputTokens??'unknown'} out<br/><code>{c.id}</code></li>)}</ol>
+     {w.diagnosticGap&&<p className="warn">{w.diagnosticGap}</p>}
+     <ol>{data.setup.state==='connected'&&data.setup.calls.filter(c=>c.workflowId===w.id).sort((a,b)=>(a.startedAt??0)-(b.startedAt??0)).map(c=><li key={c.id}>{c.phase} · <code>{c.roleId}</code> · {c.state}<br/>Requested: {c.requestedModel??'unknown'}<br/>Observed: {c.actualProvider??'unknown'} / {c.actualModel??'unknown'} · tokens {c.inputTokens??'unknown'} in / {c.outputTokens??'unknown'} out<br/>{c.failure&&<span>Failure: {c.failure.reason} · HTTP {c.failure.observedHttpStatus??'unknown'} · finish {c.failure.finishReason??'unknown'} · {c.failure.failureCategory??'category unknown'}<br/></span>}<code>{c.id}</code></li>)}</ol>
     </details>)}
    </>:<p>Loading setup evidence…</p>}
    <h3>Uditus read-only business sources</h3>

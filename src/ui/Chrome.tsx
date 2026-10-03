@@ -75,7 +75,7 @@ export function TopBar() {
           Armis <span>Workshop</span>
         </span>
       </div>
-      <span className={`badge ${source === 'live' ? 'badge--live' : 'badge--demo'}`} title={source === 'live' ? 'Read-only observed telemetry; not all Hermes activity is instrumented' : 'All data on screen is simulated'}>
+      <span className={`badge ${source === 'live' ? 'badge--live' : 'badge--demo'}`} title={source === 'live' ? 'Journal connection only: it does not prove successful worker execution' : 'All data on screen is simulated'}>
         {source === 'demo' ? 'DEMO DATA' : conn === 'connected' ? 'LIVE · OBSERVED' : conn === 'reconnecting' ? 'LIVE · STALE' : 'LIVE · NOT CONNECTED'}
       </span>
       <nav className="crumbs" aria-label="Breadcrumb">
