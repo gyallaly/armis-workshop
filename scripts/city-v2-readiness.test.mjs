@@ -84,7 +84,7 @@ test('isolated e2e config uses strict candidate port and no operational server r
   const text=isolatedPlaywrightConfig('/candidate','/outside-git',49123);assert.match(text,/reuseExistingServer:false/);assert.match(text,/49123/);assert.match(text,/--strictPort/);assert.match(text,/\/candidate\/dist/);assert.match(text,/\/candidate\/e2e/);assert.ok(!text.includes('4173'));assert.throws(()=>isolatedPlaywrightConfig('/candidate','/scratch',4173));
 });
 const identity={revision,sourceHash:'s'.repeat(64),buildHash:'b'.repeat(64)};
-function receipt(){return {version:1,passed:true,buildGeneratedByVerifier:true,checkedAt:1000,...identity,tests:['typecheck','domain','runtime-and-readiness','build','e2e'].map(name=>({name,status:'passed',...(name==='e2e'?{candidateOrigin:'http://127.0.0.1:49123'}:{})}))};}
+function receipt(){return {version:2,passed:true,buildGeneratedByVerifier:true,checkedAt:1000,...identity,tests:['typecheck','domain','runtime-and-readiness','build','e2e'].map(name=>({name,status:'passed',...(name==='e2e'?{candidateOrigin:'http://127.0.0.1:49123'}:{})}))};}
 test('activation receipt binds every suite, exact source/build and isolated e2e',()=>{
   validateReceipt(receipt(),identity,1001);
   for(const change of [{passed:false},{sourceHash:'changed'},{buildHash:'changed'},{checkedAt:2000},{buildGeneratedByVerifier:false}])assert.throws(()=>validateReceipt({...receipt(),...change},identity,1001));

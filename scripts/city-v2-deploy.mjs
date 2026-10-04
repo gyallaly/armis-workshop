@@ -38,7 +38,7 @@ function verifyRecovery(plan,adapter) {
 }
 export function validateReceipt(receipt, identity, now=Date.now()) {
   const names=['typecheck','domain','runtime-and-readiness','build','e2e'];
-  if(receipt?.version!==1||receipt.passed!==true||receipt.buildGeneratedByVerifier!==true||!Number.isFinite(receipt.checkedAt)||receipt.checkedAt>now||now-receipt.checkedAt>24*3600000||receipt.revision!==identity.revision||receipt.sourceHash!==identity.sourceHash||receipt.buildHash!==identity.buildHash||!Array.isArray(receipt.tests)||receipt.tests.length!==names.length||names.some((name,i)=>receipt.tests[i]?.name!==name||receipt.tests[i]?.status!=='passed'))throw Error('Current exact-source/build passing verification receipt required');
+  if(receipt?.version!==2||receipt.passed!==true||receipt.buildGeneratedByVerifier!==true||!Number.isFinite(receipt.checkedAt)||receipt.checkedAt>now||now-receipt.checkedAt>24*3600000||receipt.revision!==identity.revision||receipt.sourceHash!==identity.sourceHash||receipt.buildHash!==identity.buildHash||!Array.isArray(receipt.tests)||receipt.tests.length!==names.length||names.some((name,i)=>receipt.tests[i]?.name!==name||receipt.tests[i]?.status!=='passed'))throw Error('Current exact-source/build passing verification receipt required');
   const candidate=loopbackOrigin(receipt.tests.at(-1).candidateOrigin);
   if(new URL(candidate).port==='4173')throw Error('E2E must verify isolated candidate, not operational viewer');
 }
