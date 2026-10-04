@@ -3,6 +3,7 @@ import { initialState, reduce } from '../core/reducer';
 import type { ActivityEvent, Snapshot, ProviderCapacity, Provenance } from '../core/types';
 import { normalizeEvent } from '../core/normalize';
 import { diagnostics } from '../core/connections';
+import { currentWorkEvents } from './current-work';
 
 const businesses:Record<string,string>={armis:'hermes-hq',uditus:'uditus',etsy:'etsy-studio',aster:'aster-ledger'};
 const known=new Map(ROSTER.map(w=>[w.id,w]));
@@ -30,6 +31,7 @@ export class JournalProjection {
     const frame=JSON.parse(text);
     if(frame.version!==1||!safeId(frame.epoch)||!Number.isSafeInteger(frame.cursor)||frame.cursor<0)throw Error('Invalid journal envelope');
     if(name!=='snapshot'&&(this.epoch!==frame.epoch||frame.previousCursor!==undefined&&frame.previousCursor!==this.cursor||name==='heartbeat'&&frame.cursor!==this.cursor))throw Error('Journal epoch or cursor continuity lost');
+    if(name==='current-work'){if(frame.cursor!==this.cursor)throw Error('Native work cursor gap');return {type:'events',events:currentWorkEvents(frame.currentWork)};}
     if(name==='heartbeat'){const d=diagnostics.get();diagnostics.update({feeds:{...d.feeds,runtime:{id:'runtime',status:'ok',checkedAt:at,lastRecordAt:d.feeds.runtime?.lastRecordAt??null,records:d.observedJournalRecords,detail:'Installed runtime journal reader responds with coherent epoch/cursor. Provider and executor feeds require separate evidence.'}}});return {type:'heartbeat'};}
     if(!['snapshot','events'].includes(name)||!Array.isArray(frame.observations)||frame.observations.length>(name==='snapshot'?10000:500)||name==='snapshot'&&frame.mode!=='live')throw Error('Invalid journal observations');
     if(name==='events'&&(frame.previousCursor!==this.cursor||frame.cursor<this.cursor))throw Error('Journal event cursor gap');
@@ -77,6 +79,7 @@ export class JournalProjection {
     if(name==='events')return {type:'events',events};
     let state=initialState(ROSTER,'connected',at);
     state=reduce(state,{kind:'events',events});
+    state=reduce(state,{kind:'events',events:currentWorkEvents(frame.currentWork)});
     return {type:'snapshot',snapshot:{takenAt:at,workers:ROSTER,statuses:Object.values(state.statuses),tasks:Object.values(state.tasks),attempts:Object.values(state.attempts),artifacts:Object.values(state.artifacts),capacity:Object.values(state.capacity),timeline:state.timeline}};
   }
   reset(){this.epoch=null;this.cursor=0;}

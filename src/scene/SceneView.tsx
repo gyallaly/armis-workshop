@@ -9,7 +9,7 @@ import { motionEnabled, store, ui, useUi, useWorkshop } from '../ui/store';
 import { ActorSystem } from './actors';
 import { buildCampus, type CampusScene, type Pt, pointInPoly, type SceneAssets } from './campus';
 import { Camera } from './camera';
-import { prepareSceneContext } from './renderQuality';
+import { cacheSceneLayers, prepareSceneContext } from './renderQuality';
 import { coreReactors } from './coreArchitecture';
 import { floorTransform } from './cutaway';
 import { drawPowerStation, drawBuildingCharge, POWER_STATION } from './powerStation';
@@ -37,6 +37,7 @@ interface Scenes {
   interiors: Map<string, InteriorScene>;
   actors: Map<string, ActorSystem>;
   cameras: Map<string, Camera>;
+  campusLayers?: ReturnType<typeof cacheSceneLayers>;
 }
 
 function interiorOf(sc: Scenes, id: string): InteriorScene {
@@ -111,6 +112,11 @@ export function SceneView() {
     const wrap = wrapRef.current!;
     const ctx = canvas.getContext('2d')!;
     prepareSceneContext(ctx);
+    const campusLayers = sc.campusLayers ??= cacheSceneLayers(sc.campus.width,sc.campus.height,
+      (g,seam)=>sc.campus.draw(g,undefined,0,seam));
+    // Only the current cutaway is retained; navigation cannot grow texture memory.
+    const sceneLayers = viewKey === 'campus' ? campusLayers : cacheSceneLayers(sc.campus.width,sc.campus.height,
+      (g,seam)=>sc.campus.draw(g,viewKey,0,seam));
     let raf = 0;
     let last = 0;
     let frame = 0;
@@ -171,7 +177,7 @@ export function SceneView() {
 
       if (viewKey === 'campus') {
         const campus = sc.campus;
-        campus.draw(ctx,undefined,0,g=>{drawPowerStation(g,s,effectivePowerPolicies(v2.get()),now,motion);drawBuildingCharge(g,s,effectivePowerPolicies(v2.get()),now,motion);});
+        sceneLayers.draw(ctx,g=>{drawPowerStation(g,s,effectivePowerPolicies(v2.get()),now,motion);drawBuildingCharge(g,s,effectivePowerPolicies(v2.get()),now,motion);});
         campus.drawAmbient(ctx, now, motion, u.prefs.taskFlow);
         for(const b of campus.buildings) drawBuildingSignals(ctx,b.door,s,b.id);
         // hover / selection outline on buildings
@@ -194,7 +200,7 @@ export function SceneView() {
       } else {
         const interior = interiorOf(sc, viewKey);
         const actors = sc.actors.get(viewKey)!;
-        sc.campus.draw(ctx, viewKey, 0,g=>{drawPowerStation(g,s,effectivePowerPolicies(v2.get()),now,motion);drawBuildingCharge(g,s,effectivePowerPolicies(v2.get()),now,motion);});
+        sceneLayers.draw(ctx,g=>{drawPowerStation(g,s,effectivePowerPolicies(v2.get()),now,motion);drawBuildingCharge(g,s,effectivePowerPolicies(v2.get()),now,motion);});
         sc.campus.drawAmbient(ctx, now, motion, false);
         ctx.save();
         ctx.transform(...floor!.matrix);
@@ -292,7 +298,7 @@ export function SceneView() {
       }
       if (frame % 8 === 0) {
         if (u.zoomPercent !== cam.percent) ui.update({ zoomPercent: cam.percent });
-        drawMinimap(miniRef.current, sc.campus.base, cam, g=>sc.campus.draw(g,undefined,1,layer=>drawPowerStation(layer,s,effectivePowerPolicies(v2.get()),now,false)));
+        drawMinimap(miniRef.current, sc.campus.base, cam, g=>campusLayers.draw(g,layer=>drawPowerStation(layer,s,effectivePowerPolicies(v2.get()),now,false)));
       }
     };
     raf = requestAnimationFrame(loop);

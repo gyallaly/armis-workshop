@@ -25,9 +25,13 @@ export const FEEDS = [
   ['ledger','Aster paper ledger','Paper positions, candidates, costs and source freshness'],
 ] as const;
 export type FeedId = typeof FEEDS[number][0];
+export const FEED_SCOPE: Record<FeedId,'Required'|'Optional'|'Future'|'Not applicable'> = {
+ runtime:'Required',organization:'Required',workers:'Required',sessions:'Required',jobs:'Required',progress:'Required',handoffs:'Required',tools:'Required',quality:'Required',artifacts:'Required',capacity:'Required',usage:'Required',budgets:'Required',machine:'Optional',scheduler:'Required',locks:'Future',integrations:'Required',schedules:'Required',approvals:'Required',results:'Required',deployment:'Required',incidents:'Required',ledger:'Not applicable',
+};
 export interface FeedReport {
   id: FeedId;
-  status: 'ok' | 'error' | 'not_configured';
+  status: 'ok' | 'error' | 'not_configured' | 'missing_access' | 'unsupported' | 'stale' | 'not_applicable' | 'blocked' | 'partial';
+  source?: string;
   checkedAt: number;
   lastRecordAt: number | null;
   records: number;
@@ -59,7 +63,7 @@ export function decodeFeedReports(raw: unknown, now: number): FeedReport[] | nul
   if(!Array.isArray(raw) || raw.length>FEEDS.length) return null;
   const ids=new Set<string>();
   for(const r of raw) {
-    if(!r || !FEEDS.some(f=>f[0]===r.id) || ids.has(r.id) || !['ok','error','not_configured'].includes(r.status) || !Number.isFinite(r.checkedAt) || r.checkedAt<0 || r.checkedAt>now+30000 || (r.lastRecordAt!==null && (!Number.isFinite(r.lastRecordAt) || r.lastRecordAt<0 || r.lastRecordAt>r.checkedAt)) || !Number.isSafeInteger(r.records) || r.records<0 || typeof r.detail!=='string' || r.detail.length>500) return null;
+    if(!r || !FEEDS.some(f=>f[0]===r.id) || ids.has(r.id) || !['ok','error','not_configured','missing_access','unsupported','stale','not_applicable','blocked','partial'].includes(r.status) || !Number.isFinite(r.checkedAt) || r.checkedAt<0 || r.checkedAt>now+30000 || (r.lastRecordAt!==null && (!Number.isFinite(r.lastRecordAt) || r.lastRecordAt<0 || r.lastRecordAt>r.checkedAt)) || !Number.isSafeInteger(r.records) || r.records<0 || typeof r.detail!=='string' || r.detail.length>500 || r.source!==undefined&&(typeof r.source!=='string'||r.source.length>300)) return null;
     ids.add(r.id);
   }
   return raw;

@@ -5,17 +5,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { createViewerServer } from '../server/index.ts';
+import { EXECUTION_PATHS } from '../server/owner-policy.mjs';
 import { loopbackFetch } from './loopback-fetch.mjs';
 import { createServer } from 'node:http';
 import { DatabaseSync } from 'node:sqlite';
 import { checkMacConnection } from './check-mac-connection.mjs';
 test('loopback cookie and CSRF boundary; capabilities never green without executor',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'armis-http-'));writeFileSync(join(dir,'index.html'),'<html>fixture</html>');
- const server=createViewerServer({dist:dir,policyPath:join(dir,'policy.json'),port:0});await once(server,'listening');const base=`http://127.0.0.1:${server.address().port}`;
+ const server=createViewerServer({dist:dir,policyPath:join(dir,'policy.json'),chatStorePath:join(dir,'chat.json'),port:0});await once(server,'listening');const base=`http://127.0.0.1:${server.address().port}`;
  try {
   assert.equal((await fetch(base+'/api/control')).status,401);
   const page=await loopbackFetch(base+'/',{headers:{'Sec-Fetch-Site':'none','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'}});const cookie=page.headers.get('set-cookie').split(';')[0];await page.body.cancel();
-  const state=await(await fetch(base+'/api/control',{headers:{Cookie:cookie}})).json();assert.equal(state.capabilities.chat,false);assert.equal(state.capabilities.companyControl,false);assert.equal(state.coverage.uncovered.length,8);
+  const state=await(await fetch(base+'/api/control',{headers:{Cookie:cookie}})).json();assert.equal(state.capabilities.chat,false);assert.equal(state.capabilities.companyControl,false);assert.deepEqual(state.coverage.uncovered,EXECUTION_PATHS);
   const command={id:'stop1',type:'company.stop',businessId:'uditus',expectedRevision:0,expiresAt:Date.now()+60000};
   assert.equal((await fetch(base+'/api/control/commands',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify(command)})).status,403);
   const response=await fetch(base+'/api/control/commands',{method:'POST',headers:{Cookie:cookie,Origin:base,'X-Armis-Owner':'1','Content-Type':'application/json'},body:JSON.stringify(command)});assert.equal((await response.json()).state,'rejected');
@@ -23,12 +24,12 @@ test('loopback cookie and CSRF boundary; capabilities never green without execut
   assert.equal((await fetch(base+'/api/admission',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,401);
  }finally{await new Promise(resolve=>server.close(resolve));rmSync(dir,{recursive:true});}
 });
-test('real installed named transport and gated configured chat idempotence',async()=>{
+test('named protocol fixture and gated fake chat idempotence; not installed Hermes evidence',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'armis-live-'));writeFileSync(join(dir,'index.html'),'<html>fixture</html>');
  const db=new DatabaseSync(join(dir,'runtime.db'));db.exec('CREATE TABLE viewer_events(cursor INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT NOT NULL,body TEXT NOT NULL)');db.close();
  let calls=0;
- const executor=createServer(async(req,res)=>{assert.equal(req.headers.authorization,'Bearer fixture-secret');res.setHeader('Content-Type','application/json');if(req.url==='/capabilities'){res.end(JSON.stringify({verified:true,chat:true,recipient:'Fixture Hermes',covered:['owner-chat','executives','workers','delegations','schedules','retries','provider-adapters','tool-processes']}));return;}for await(const chunk of req){} if(req.url==='/chat'){calls++;res.end(JSON.stringify({reply:'Verified fixture response'}));}else if(req.url==='/cancel')res.end(JSON.stringify({stopped:true,residualUsage:false}));else res.end(JSON.stringify({applied:true}));});executor.listen(0,'127.0.0.1');await once(executor,'listening');
- const options={dist:dir,dbPath:join(dir,'runtime.db'),policyPath:join(dir,'policy.json'),executorUrl:`http://127.0.0.1:${executor.address().port}/`,executorToken:'fixture-secret',gateToken:'gate-fixture',port:0};
+ const executor=createServer(async(req,res)=>{assert.equal(req.headers.authorization,'Bearer fixture-secret');res.setHeader('Content-Type','application/json');if(req.url==='/capabilities'){res.end(JSON.stringify({verified:true,chat:true,recipient:'Fixture Hermes',covered:EXECUTION_PATHS}));return;}for await(const chunk of req){} if(req.url==='/chat'){calls++;res.end(JSON.stringify({reply:'Verified fixture response'}));}else if(req.url==='/cancel')res.end(JSON.stringify({stopped:true,residualUsage:false}));else res.end(JSON.stringify({applied:true}));});executor.listen(0,'127.0.0.1');await once(executor,'listening');
+ const options={dist:dir,dbPath:join(dir,'runtime.db'),policyPath:join(dir,'policy.json'),chatStorePath:join(dir,'chat.json'),executorUrl:`http://127.0.0.1:${executor.address().port}/`,executorToken:'fixture-secret',gateToken:'gate-fixture',port:0,verifyExecutorEvidence:()=>({verified:true,covered:EXECUTION_PATHS,reason:'Independent fake-executor fixture checks, not installed evidence'})};
  let server=createViewerServer(options);await once(server,'listening');
  async function auth(){const base=`http://127.0.0.1:${server.address().port}`;const page=await loopbackFetch(base+'/',{headers:{'Sec-Fetch-Site':'none','Sec-Fetch-Mode':'navigate','Sec-Fetch-Dest':'document'}});const cookie=page.headers.get('set-cookie').split(';')[0];await page.body.cancel();return {base,headers:{Cookie:cookie,Origin:base,'X-Armis-Owner':'1','Content-Type':'application/json'}};}
  try {

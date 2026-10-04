@@ -6,6 +6,9 @@
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",
     "strict": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "noEmit": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
@@ -16,5 +19,5 @@
     "resolveJsonModule": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src", "tests", "e2e", "vite.config.ts", "playwright.config.ts", "vitest.config.ts"]
+  "include": ["src", "server", "tests", "e2e", "vite.config.ts", "playwright.config.ts", "vitest.config.ts"]
 }

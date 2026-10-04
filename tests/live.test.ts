@@ -36,6 +36,7 @@ describe('read-only telemetry boundary', () => {
       send(value:unknown) { this.onmessage?.({data:JSON.stringify(value)}); }
     }
     vi.stubGlobal('EventSource',Stream);
+    vi.stubGlobal('fetch',vi.fn().mockRejectedValue(new Error('Supplemental source not available in this SSE test')));
     const sink:AdapterSink = {snapshot:vi.fn(),events:vi.fn(),connection:vi.fn(),tick:vi.fn(),reset:vi.fn()};
     const adapter = new LiveBridgeAdapter('http://localhost/telemetry');
     adapter.start(sink);

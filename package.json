@@ -6,8 +6,7 @@
   "description": "ARMIS City V2 - spatial operating campus, provider supply, owner controls and Hermes conversation contracts.",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
-    "build": "tsc --noEmit -p tsconfig.json && vite build",
-    "postbuild": "node scripts/stamp-build.mjs",
+    "build": "node scripts/build-viewer.mjs",
     "serve:live": "node server/cli.ts",
     "deploy:mac": "node scripts/deploy-mac.mjs",
     "test:runtime": "node --test scripts/owner-policy.test.mjs scripts/runtime-http.test.mjs",
