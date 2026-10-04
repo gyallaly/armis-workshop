@@ -54,6 +54,12 @@ it('fits the complete island and apron inside existing fit and minimap art bound
   }
 });
 
+it('keeps the reserve above the collapsed chat overlay at the campus fit', () => {
+  for (const [x,y] of reservedIslandSkirt()) {
+    expect(iso.p(x,y,-8)[1]).toBeLessThan(625);
+  }
+});
+
 it('renders the apron, rock faces and uninterrupted flat top without buildings or props', () => {
   const polygons: [number, number][][] = [];
   let path: [number, number][] = [];

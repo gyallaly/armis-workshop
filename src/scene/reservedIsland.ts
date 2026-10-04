@@ -4,7 +4,7 @@ type Point = [number, number];
 
 /** Decorative land reserve only: no business, building, route or hit target. */
 export const RESERVED_ISLAND = {
-  center: [600, 290] as Point,
+  center: [588, 170] as Point,
   elevation: 0,
   waterElevation: -8,
   outline: [
@@ -12,7 +12,7 @@ export const RESERVED_ISLAND = {
     [639, 240], [650, 262], [642, 277], [665, 294], [653, 309],
     [655, 326], [632, 334], [618, 347], [601, 338], [578, 350],
     [565, 331], [543, 322], [551, 301], [535, 287], [545, 270],
-  ] as Point[],
+  ].map(([x,y]) => [588 + (x! - 600) * .85, 170 + (y! - 290) * .85]) as Point[],
 };
 
 /** The submerged apron and flat top share one jagged world-space footprint. */
